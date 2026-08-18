@@ -62,7 +62,7 @@ Two operational rules are non-negotiable. Keys live in environment variables, ne
 - Customer Preferences and Personalisation
 - Customer Notifications
 
-**Why.** The US and Ireland run spends a full applied-project week on one extension and is assessed on depth, integration quality and the security review. The India cohort are returning interns who already hold the fundamentals, start at applied depth, and have a shorter run with less taught time per topic; four narrower extensions give them more integration surface and more visible product value in the same calendar space. The four chosen for India form one coherent customer-facing feature set rather than four unrelated services.
+**Why.** The US and Ireland run spends a full applied-project week on one extension and is assessed on depth, integration quality and the security review. The India run is shorter and has less taught time per topic. Four narrower extensions provide more integration surface in the available time. The four chosen for India form one coherent customer-facing feature set rather than four unrelated services.
 
 **Dependencies, which drive build order.** Customer Notifications depends on Customer Preferences, because a notification cannot be routed without a channel preference. Watchlists alerting depends on Notifications, because a triggered threshold has to be delivered somewhere. India teams therefore build in the order Preferences, Notifications, Watchlists, with Portfolio and P&L independent of the other three and safe to build in parallel.
 
@@ -82,7 +82,7 @@ The correct scope:
 | Messaging | Apache Kafka only. |
 | End-to-end testing | Playwright, Sprint 9. |
 | Unit testing | JUnit 5 for Java, Jest for TypeScript, pytest for Python. |
-| CI | None. Checks and deployment run as scripts. |
+| CI | None. `us-ireland` ships acceptance and deployment scripts. `india` ships no scripts. See decision 7. |
 | Quality | SonarQube, Sprint 7. |
 | Containers | Docker and Docker Compose, from Sprint 6. |
 
@@ -92,13 +92,15 @@ The correct scope:
 
 ---
 
-## 5. Sprint 6 authenticates against a provided Node auth stub.
+## 5. The provided Node auth stub is `us-ireland` only.
 
-**Decision.** A minimal Node authentication stub is shipped in the starter material. It exposes the same routes as the eventual NestJS service and issues JWTs with an identical claims contract: `sub`, `accountId`, `roles`, `iat`, `exp`, signed with the same algorithm and a shared development secret. Participants integrate the Trade REST API against it in Sprint 6 and keep using it through Sprint 7. In Sprint 8 they build the real service and swap it in.
+**Decision.** A minimal Node authentication stub is shipped in the `us-ireland` starter material. It exposes the same routes as the eventual NestJS service and issues JWTs with an identical claims contract: `sub`, `accountId`, `roles`, `iat`, `exp`, signed with the same algorithm and a shared development secret. Participants integrate the Trade REST API against it in Sprint 6 and keep using it through Sprint 7. In Sprint 8 they build the real service and swap it in.
 
-**Why.** Sprint 6 teaches JWT validation in Spring Boot and requires a protected route to demonstrate it. Node and NestJS are not taught until Sprint 8. Without a stub, participants would either hard-code a token, which teaches nothing about verification, or disable security for two sprints and retrofit it, which is exactly the habit the programme is trying to break. The stub is provided rather than built because writing it would mean teaching Node two sprints early.
+The `india` branch ships no stub. Teams provide a token issuer that conforms to `contracts/auth-api.yaml`. See decision 7.
 
-**What changes.** The stub is a fixture, not a deliverable. It has no tests to write, no bugs planted in it and no assessment attached. Its claims contract is normative: `contracts/auth-api.yaml` describes both the stub and the Sprint 8 service, and the Sprint 8 acceptance criterion is that swapping one for the other requires no change to the Trade REST API beyond configuration. Both listen on port 3000 for that reason.
+**Why.** Sprint 6 teaches JWT validation in Spring Boot and requires a protected route to demonstrate it. Node and NestJS are not taught until Sprint 8. On `us-ireland`, the stub allows participants to integrate authentication before they build the Auth service.
+
+**What changes.** On `us-ireland`, the stub is a fixture, not a deliverable. It has no tests to write, no bugs planted in it and no assessment attached. Its claims contract is normative: `contracts/auth-api.yaml` describes both the stub and the Sprint 8 service, and the Sprint 8 acceptance criterion is that swapping one for the other requires no change to the Trade REST API beyond configuration. Both listen on port 3000 for that reason.
 
 The stub's issuer name is `auth-stub` rather than `auth-service`, so that a team can prove which one signed a token during the Sprint 8 cutover.
 
@@ -106,13 +108,23 @@ The stub's issuer name is `auth-stub` rather than `auth-service`, so that a team
 
 ## 6. Deliberately imperfect starter code applies to the us-ireland branch only.
 
-**Decision.** The planted-defect starter codebase, meaning the basic Trade and Portfolio API stubs carrying intentional bugs, security vulnerabilities and legacy patterns, exists on the `us-ireland` branch only. The `india` branch starts from clean stubs. A defect catalogue is maintained for instructors, listing every planted issue, its OWASP category where relevant, the sprint at which it is expected to surface, and the accepted remediation.
+**Decision.** The planted-defect starter codebase, meaning the basic Trade and Portfolio API stubs carrying intentional bugs, security vulnerabilities and legacy patterns, exists on the `us-ireland` branch only. The `india` branch ships no starter implementation. A defect catalogue is maintained for instructors, listing every planted issue, its OWASP category where relevant, the sprint at which it is expected to surface, and the accepted remediation.
 
-**Why.** The imperfect-codebase premise costs time: participants must read code before writing any, and the Sprint 7 refactoring and characterisation-test work depends on there being something worth refactoring. The India run is three weeks shorter, starts at Sprint 3, and covers the same nine capstone components. Something had to give, and reading someone else's broken code is the part these participants have already done, since they are returning interns who worked in the codebase during their internship.
+**Why.** `india` is a greenfield build. Teams design and implement the assessed components from the written requirements and contracts.
 
 **What changes.** The Sprint 7 refactoring mission differs by branch. On `us-ireland` teams write characterisation tests around the planted starter code and refactor it. On `india` teams write characterisation tests around their own Sprint 6 code before extending it, which delivers the same learning outcome against a different subject. Assessment rubrics for Sprint 7 must be phrased against the outcome, not against the specific defects.
 
 The defect catalogue is instructor-only material. Do not commit it to either student branch.
+
+---
+
+## 7. The `india` branch is spec-only.
+
+**Decision.** The `india` branch contains written requirements, contracts, fixtures and non-runnable templates. It ships no scripts, acceptance harness, Docker Compose file, auth stub or runnable implementation. Teams design and implement the assessed components and provision their local infrastructure. The `us-ireland` branch retains its boilerplate and tooling.
+
+**Why.** This keeps the India build greenfield while preserving the common requirements and test data.
+
+**What changes.** Material for `india` must not instruct participants to run supplied scripts, start a supplied Compose stack, use a supplied auth stub or extend supplied application code. The `us-ireland` material may reference those resources.
 
 ---
 

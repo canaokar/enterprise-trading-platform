@@ -18,7 +18,7 @@ flowchart TB
 
   subgraph SEC["Security, Sprint 8"]
     AUTH["Auth service<br/>NestJS, JWT issue and verify<br/>:3000"]
-    STUB["Node auth stub<br/>provided, Sprint 6 only<br/>:3000"]
+    STUB["Node auth stub<br/>us-ireland only, Sprint 6<br/>:3000"]
   end
 
   subgraph API["API, Sprint 6"]
@@ -88,7 +88,7 @@ flowchart TB
 |---|---|---|---|---|
 | Angular UI | 9 | Angular 21+, TypeScript, signals, RxJS | 4200 in development, static objects behind CloudFront in production | Login, dashboard, order ticket, blotter. Holds the JWT, attaches it through an interceptor, guards authenticated routes. Consumes typed clients generated from the contracts in `contracts/`. |
 | Auth service | 8 | NestJS 11, TypeScript, argon2 or bcrypt, Jest | 3000 | Registration, login, refresh, current user. Signs and verifies JWTs. Owns the credential store. It is the only service that ever sees a password. |
-| Node auth stub | provided, used in 6 and 7 | Node, minimal HTTP server | 3000 | Issues test JWTs with identical claims to the real service so that Sprint 6 and Sprint 7 work can be authenticated before Node is taught. Discarded in Sprint 8. |
+| Node auth stub | `us-ireland` only, used in 6 and 7 | Node, minimal HTTP server | 3000 | Issues test JWTs with identical claims to the real service so that Sprint 6 and Sprint 7 work can be authenticated before Node is taught. Discarded in Sprint 8. On `india`, teams provide a token issuer that conforms to `contracts/auth-api.yaml`. |
 | Trade REST API | 6 | Spring Boot 3.x, MyBatis 3.5, Bean Validation, Docker | 8080 | The write path. Validates orders against the business rules, persists them, publishes them to `orders`. Serves account details, balance, positions and order history. Verifies the JWT on every `/api/**` route. |
 | Trading domain engine | 5 | Java 21, JUnit 5 | none | Entities, enums, DTOs, exception hierarchy and the buy and sell rules. No database access, no HTTP, no framework annotations beyond validation. Packaged as a module inside the Trade REST API from Sprint 6 onwards. |
 | Kafka broker | 7 | Apache Kafka 3.x or 4.x | 9092 externally, 29092 inside the compose network | Carries `orders`, `trade-events` and `market-data`. See `contracts/kafka-topics.md`. |
@@ -171,7 +171,7 @@ The load runs both ways in the platform but for different reasons. Batch ETL ext
 | 3 | Trade database | Data | nothing | everything |
 | 4 | Analytics and first ETL | Analytics | Sprint 3 schema | dashboard, later the analytical store |
 | 5 | Trading domain engine | Domain | Sprint 3 model | Sprint 6 service |
-| 6 | Trade REST API | API | Sprint 5 engine, Sprint 3 schema, provided auth stub | UI, Kafka, extensions |
+| 6 | Trade REST API | API | Sprint 5 engine, Sprint 3 schema, a Sprint 6 token issuer (the provided stub on `us-ireland`, team-provided on `india`) | UI, Kafka, extensions |
 | 7 | Kafka topics, Trade Executor, market-data poller, batch ETL | Messaging, Execution, Analytics | Sprint 6 API, Fauxnance | analytics, extensions, notifications |
 | 8 | Auth service | Security | Sprint 3 schema, Sprint 6 API to protect | UI, every API |
 | 9 | Angular UI | Presentation | Sprints 6 and 8 contracts | end users |
@@ -194,4 +194,4 @@ The Fauxnance key rule has a direct consequence for the architecture: the Angula
 
 ## Local topology
 
-Development runs under Docker Compose: Postgres, Kafka, the Trade REST API, the auth service or stub, the executor and the poller. The Angular dev server and the Python tooling run on the host. Nothing in the platform requires cloud infrastructure before Sprint 11, and Sprint 11 deploys only the Angular build.
+On `us-ireland`, development runs under the shipped Docker Compose stack: Postgres, Kafka, the Trade REST API, the auth service or stub, the executor and the poller. The Angular dev server and the Python tooling run on the host. On `india`, teams design and provision their local topology from the written requirements and contracts. Nothing in the platform requires cloud infrastructure before Sprint 11, and Sprint 11 deploys only the Angular build.
