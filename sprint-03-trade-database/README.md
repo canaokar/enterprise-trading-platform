@@ -258,6 +258,21 @@ These are the criteria your instructor assesses against.
    path documented.
 7. An ER diagram is committed, and every team member can walk it unaided.
 
+## Evaluation
+
+This sprint contributes 7 marks to the 100-mark Capstone assessment. The
+provided scripts, probes, manifest and infrastructure carry no marks. The team
+is assessed on the schema it designs, the SQL it writes and the evidence it can
+explain.
+
+| Criterion | Marks |
+|---|---:|
+| ER model, relationship choices and third-normal-form justification | 2 |
+| DDL, keys, foreign keys, checks and domain enforcement | 2 |
+| Index choices and historical trade structures | 1 |
+| Repeatable migrations, representative seed data and the design walkthrough | 2 |
+| **Total** | **7** |
+
 One further criterion has no automated check and is worth more than the rest.
 The model has to be the one the platform needs, not one that fits only this
 week. From Sprint 5 your Java entities are built against it, in Sprint 6 your

@@ -488,6 +488,22 @@ These are the criteria your instructor assesses against.
 7. SonarQube gate passing on the pipeline and the Java services.
 8. Characterisation tests written before any refactoring of the starter code.
 
+## Evaluation
+
+This sprint contributes 10 marks to the 100-mark Capstone assessment. The
+project layouts, harness and supplied batch loader carry no marks unchanged.
+The team is assessed on the implementation, correction, integration and
+evidence it adds.
+
+| Criterion | Marks |
+|---|---:|
+| Topic configuration and the Trade REST API publishing change | 2 |
+| Trade Executor pricing, settlement transaction and event publication | 2 |
+| Duplicate safety, retries and dead-letter handling | 2 |
+| Quota-aware market-data polling and the incremental analytical load | 2 |
+| Characterisation history, tests, SonarQube gate and live demonstration | 2 |
+| **Total** | **10** |
+
 ## The check harness
 
 `scripts/check.sh` asserts the things a machine can assert. It has two modes.

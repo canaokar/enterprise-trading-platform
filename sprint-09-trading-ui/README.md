@@ -398,3 +398,19 @@ These are the criteria your instructor assesses against.
 7. The blotter shows status badges and handles an order sitting at `NEW`.
 8. Playwright covers signing in, placing an order and viewing history.
 9. No API key and no secret is present in the built bundle.
+
+## Evaluation
+
+This sprint contributes 13 marks to the 100-mark Capstone assessment. The
+workspace, generator configuration, empty feature directories and compiling
+bootstrap carry no marks unchanged. Generated clients earn marks only when
+they are current, integrated and used by working journeys.
+
+| Criterion | Marks |
+|---|---:|
+| Sign-in, dashboard, order ticket and blotter behaviour | 3 |
+| Token interceptor, route guards and safe redirect handling | 3 |
+| Current generated clients and working asynchronous API integration | 3 |
+| Validation, catalogue messages, status states and basic accessibility | 1 |
+| Unit tests, three independent Playwright journeys and bundle security | 3 |
+| **Total** | **13** |

@@ -399,6 +399,22 @@ These are the criteria your instructor assesses against.
 9. The security review against the auth-related OWASP items is committed, with
    a finding and a disposition for every category.
 
+## Evaluation
+
+This sprint contributes 13 marks to the 100-mark Capstone assessment. The Node
+build, module directories, review template and harness carry no marks unchanged.
+The team is assessed on the security properties, integration and behaviour it
+implements and demonstrates.
+
+| Criterion | Marks |
+|---|---:|
+| Four contract-compliant endpoints and the served OpenAPI document | 2 |
+| Password hashing, credential handling and uniform login failure | 3 |
+| Access-token claims, refresh rotation and replay response | 3 |
+| Guard behaviour and replacement of the auth stub without Java changes | 2 |
+| Jest evidence, OWASP review, container build and Compose integration | 3 |
+| **Total** | **13** |
+
 ## The check harness
 
 `scripts/check.sh` asserts the things a machine can assert. Two modes.

@@ -214,6 +214,20 @@ These are the criteria your instructor assesses against.
    case.
 5. Rate-limit and error handling are present, and not a bare `try` block.
 
+## Evaluation
+
+This sprint contributes 8 marks to the 100-mark Capstone assessment. The
+package layout, fixtures and harness carry no marks unchanged. The team is
+assessed on the pipeline, analytical findings, tests and handling of real data.
+
+| Criterion | Marks |
+|---|---:|
+| Three defensible business claims supported by readable charts | 2 |
+| Separated extract, transform and load pipeline with a runnable entry point | 2 |
+| Fauxnance integration, caching, quota control and distinct failure handling | 2 |
+| Transform and malformed-input tests, packaging and reproducible evidence | 2 |
+| **Total** | **8** |
+
 ## The check harness
 
 `scripts/check.sh` asserts the things a machine can assert. Run it as often as

@@ -382,6 +382,22 @@ These are the criteria your instructor assesses against.
    all green.
 8. UML class and sequence diagrams are committed and match the code.
 
+## Evaluation
+
+This sprint contributes 18 marks to the 100-mark Capstone assessment. The
+Maven build, source tree and harness carry no marks unchanged. The team is
+assessed on its domain design, rule implementation, test history and ability to
+explain the model.
+
+| Criterion | Marks |
+|---|---:|
+| Entities, enumerations and the validated order request DTO | 4 |
+| Business rules 1 to 8, including evaluation order and boundary behaviour | 5 |
+| Exception hierarchy and independence from database, HTTP and Spring | 3 |
+| JUnit coverage and test-first evidence in commit history | 4 |
+| UML diagrams that match the code and support the team walkthrough | 2 |
+| **Total** | **18** |
+
 ## The check harness
 
 `scripts/check.sh` asserts the things a machine can assert. Run it as often
