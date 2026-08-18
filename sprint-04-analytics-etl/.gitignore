@@ -5,7 +5,7 @@
 *.duckdb
 *.duckdb.wal
 
-# Scratch venv built by scripts/check.sh.
+# Local virtual environments.
 .check-venv/
 
 # Editable install metadata.

@@ -5,11 +5,11 @@
 -- about the second row may differ: a different primary key, a different
 -- quantity, a different timestamp. Only the idempotency key has to repeat.
 --
--- The harness wraps this file in BEGIN and ROLLBACK, so it leaves nothing
--- behind, and it runs after the seed data has loaded, so you may reference the
+-- Run this file inside BEGIN and ROLLBACK so it leaves nothing behind. Run it
+-- after the seed data has loaded, so you may reference the
 -- accounts and instruments from seed/ rather than creating them here.
 --
--- The harness expects the second statement to fail with SQLSTATE 23505, unique
+-- The second statement must fail with SQLSTATE 23505, unique
 -- violation. Any other outcome is a finding:
 --
 --   both inserts succeed        there is no unique constraint on the key

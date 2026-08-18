@@ -16,7 +16,7 @@ what is assessed.
 
 That is why this folder is thin. There is no scaffold in here, because there is nothing to
 scaffold until you have designed it. What is here is the four briefs, the shape of the two
-documents you have to produce, and a harness that checks the handful of things a script can
+documents you have to produce, and the evidence required at review
 check.
 
 ## What changes this week
@@ -98,7 +98,7 @@ week's real risk with four services in it.
 The features differ. Four properties do not.
 
 **Each one is a separate service.** Its own port, its own folder under `services/`, its own
-entry in `docker-compose.yml`, its own Dockerfile, its own README covering configuration, how
+entry in your local orchestration, its own Dockerfile, its own README covering configuration, how
 to run it and what its tests do and do not cover. Four services, not one service with four
 packages in it and not three services and a module.
 
@@ -271,36 +271,30 @@ server-side request forgery.
 README.md              this brief
 catalogue/             four briefs, one per mandatory extension, plus stretch.md
 decision-log/          TEMPLATE.md, and your entries beside it
-manifest.env           the names the harness reads
-scripts/check.sh       the acceptance harness
+manifest.env           the names and review values chosen by your team
 ```
 
 Your services do not live here. Each lives in `services/<name>/` with the rest of the platform,
-and each goes into `docker-compose.yml` like everything else you have built. This folder holds
-the sprint's documents and the harness that reads them.
+and each goes into your local orchestration like everything else you have built. This folder holds
+the sprint's documents.
 
 Your security review goes in this folder. The default name in `manifest.env` is
 `security-review/REVIEW.md`.
 
 [catalogue/stretch.md](catalogue/stretch.md) describes the two extensions in the catalogue that
 are not mandatory here. They are stretch goals and they are available only once all four
-services pass the harness.
+services pass their tests and review.
 
-## The harness
+## Acceptance review
 
-`scripts/check.sh` runs in two modes and reads every name it needs from `manifest.env`, so it
-asserts your design rather than dictating one.
+Your team must provide repeatable tests for the machine-checkable criteria.
+The review uses the names and values in `manifest.env`.
 
 **Static mode** is the default: no running service. It reads the manifest, confirms the four
 briefs are where it expects them and that you have declared four services on four different
 ports, counts the decision log entries that are not the template, and reads your combined
 review: that it exists, that it is not the template, that every category carries a finding and
 a disposition, and that all four services are named somewhere in it.
-
-```bash
-scripts/check.sh
-scripts/check.sh --live
-```
 
 **Live mode** needs the whole stack up and starts nothing itself. It signs in once, the way the
 Angular application signs in, then puts the same four probes to each of the four services: the
@@ -321,8 +315,8 @@ Then it follows the chain as far as it can be followed from outside.
 Creating that alert is the only write live mode makes. Everything else it does is a read, so a
 run leaves nothing behind but one alert on the demo account.
 
-The two publish commands are yours to declare, because the harness has no Kafka client and will
-not guess at your topic configuration, your container names or your envelope. A console
+The two publish commands are yours to declare, because reviewers will not
+guess at your topic configuration, your container names or your envelope. A console
 producer, a small script in your repository, or a real order placed through the Trade REST API
 all work, and the last is the one closest to the demonstration. Leave a command empty and the
 probe it drives becomes a named skip rather than a failure, which is what a Tuesday run should
@@ -350,8 +344,8 @@ These are the criteria your instructor assesses against.
 
 ## Integration quality is read by a person
 
-Say it plainly, because the harness is short enough that a team could mistake a green run for a
-finished sprint. It checks that some files exist and say something, that four services answer
+Automated checks are not a finished sprint. They show that some files exist
+and say something, that four services answer
 three requests each in the right way, and that two things it caused changed something it can
 read. That is all it can check.
 

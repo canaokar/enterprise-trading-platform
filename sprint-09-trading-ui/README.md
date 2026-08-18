@@ -32,14 +32,14 @@ stack up, and finding that out on Thursday costs you the deliverable.
 | Every catalogue code mapped to a readable message | the file or directory you declare |
 | Unit tests, including the two named interceptor cases | beside the code, as `*.spec.ts` |
 | Two Playwright journeys | your `E2E_DIR` |
-| The manifest telling the check harness your names | `manifest.env` |
+| The manifest recording the names in your design | `manifest.env` |
 
 ## The engineering contract
 
 No workspace scaffold and no starter code ships. Set one Angular workspace up in this folder
 and decide for yourself how it is decomposed and where each rule lives, which is most of what
-this sprint assesses. Every path the harness reads is one you declare in `manifest.env`, so
-nothing below dictates a file layout. Ten things are fixed, because the harness, your reviewers
+this sprint assesses. Every review path is one you declare in `manifest.env`, so
+nothing below dictates a file layout. Ten things are fixed, because your reviewers
 and your teammates depend on them.
 
 - One Angular workspace rooted here, on Angular 21, where `npm ci`, `npm run build` and
@@ -51,7 +51,7 @@ and your teammates depend on them.
   beside the code they cover.
 - Typed clients generated from `contracts/`, never hand-written, with the generator and its
   version pinned in a configuration at the path `GENERATOR_CONFIG` names, in the
-  `openapitools.json` shape the harness reads. Document the generation command in a README of
+  `openapitools.json` shape described below. Document the generation command in a README of
   your own here.
 - That generated output committed rather than ignored, regenerated on every contract change,
   and never edited by hand.
@@ -70,13 +70,12 @@ npm install                  # first run, and whenever you add a dependency
 npm run build
 npm test
 
-scripts/check.sh             # and --live once your stack is up
 ```
 
 ## The typed clients are generated
 
 Pin the generator version rather than taking whatever resolves today, so that two people on the
-team generate the same output and the harness regenerates with exactly your settings. Declare
+team generate the same output and reviewers can regenerate with exactly your settings. Declare
 one entry per contract, `trade-api.yaml` and `auth-api.yaml`, each writing into its own
 subdirectory of the tree `GENERATED_CLIENT_DIR` names. The generator runs on the JVM. You will
 have to set `skipValidateSpec`, and you should not switch a validation off without knowing why:
@@ -93,12 +92,12 @@ runtime. That is the whole reason the contract exists.
 Committed, not git-ignored, and your `.gitignore` says so in as many words. Committing it means
 a clone builds with no Java runtime and no network, and means a contract change arrives as a
 diff a reviewer has to read. Regenerate on every contract change and commit the result in the
-same commit as the code that adapts to it. The harness regenerates into a temporary directory
+same commit as the code that adapts to it. The review regenerates into a temporary directory
 and diffs, so a stale client is a named failure with the differing files listed.
 
 Nobody reviews the formatting or the naming inside that tree. It is machine output, and the
 next generation reverts anything you tidy. Never edit a file in there: when the generated shape
-is awkward to consume, wrap it in a service of your own outside it. The harness reads the
+is awkward to consume, wrap it in a service of your own outside it. The review reads the
 generator's own file list and fails if a file appears inside the generated tree that the
 generator did not write.
 
@@ -180,7 +179,7 @@ does not allow your dev server origin, and a code you have never seen, which nee
 sentence rather than a blank panel.
 
 Treat this as a mapping with a completeness property, not as a switch statement you extend when
-somebody reports a blank screen. The harness reads the codes out of the contracts and names any
+somebody reports a blank screen. The review reads the codes out of the contracts and names any
 missing from your mapping.
 
 ## The blotter
@@ -212,7 +211,7 @@ new key places a second order.
 ## The Playwright deliverable
 
 Two journeys against your running stack, in the directory `E2E_DIR` names. The file names in
-`manifest.env` are the defaults, and the harness runs each file in its own process.
+`manifest.env` are the defaults. Run each file in its own process.
 
 | Journey | Default file | Covers |
 |---|---|---|
@@ -221,31 +220,31 @@ Two journeys against your running stack, in the directory `E2E_DIR` names. The f
 
 Two is the assessed set for this cohort, and this is a four-day week. A third journey over the
 blotter is worth writing if the time is there: declare it under `E2E_EXTRA_SPEC` in
-`manifest.env` and the harness runs it alongside the other two and reports it by name. Leave
-that key empty and the harness names the skip rather than failing.
+`manifest.env` and run it alongside the other two. Leave that key empty when
+there is no extra journey.
 
 These run against your real services, because an end-to-end test that talks to a stub proves
 nothing about integration. Each journey starts from a clean sign-in and leaves nothing behind
 that another journey needs. Playwright gives each test a fresh browser context, so this rule
 gets broken with shared state on your side: a token stashed in a module variable, an account
 seeded by one spec and read by the next, an order a blotter spec expects because the order spec
-placed it. The harness runs each file in its own process, so a journey that only passes when
+placed it. The review runs each file in its own process, so a journey that only passes when
 its neighbour ran first fails here rather than at the review.
 
 Order-placement assertions accept `NEW`, `FILLED` or `REJECTED`. A spec that asserts `FILLED`
 fails the week the executor is switched on, which is the wrong signal from a test.
 
 Read every address and credential from the environment, under these names, so that your specs
-and the harness stay on one set: `E2E_BASE_URL`, `E2E_TRADE_API`, `E2E_AUTH_API`,
+and the review stay on one set: `E2E_BASE_URL`, `E2E_TRADE_API`, `E2E_AUTH_API`,
 `E2E_USERNAME`, `E2E_PASSWORD`, `E2E_ACCOUNT_ID` and `E2E_SYMBOL`. Give the sign-in form's
-username field, password field and submit button a stable `data-testid`: the harness drives
+username field, password field and submit button a stable `data-testid`: the review drives
 that form with the selectors in `manifest.env`.
 
 ## Nothing secret in the bundle
 
 `npm run build` produces files that every browser downloading this application receives. There
 is no private part of a front-end build. Minification is not obfuscation, and a `.map` file is
-the source back again. Three things must not appear in the output, and the harness greps the
+the source back again. Three things must not appear in the output, and the review searches the
 built files for each of them with the patterns in `manifest.env`.
 
 | Pattern | Why |
@@ -254,17 +253,17 @@ built files for each of them with the patterns in `manifest.env`.
 | An `execute-api.<region>.amazonaws.com` host | This application never calls the market-data API. Prices reach the browser through your own services |
 | `jwt_secret`, a secret assigned a long literal, a three-part JWT written into source | A signing secret in the browser lets any reader mint a token the whole platform accepts |
 
-With the repository root `.env` present, the harness also searches the bundle for the literal
+With the repository root `.env` present, the review also searches the bundle for the literal
 values of your own key and signing secret, which catches a value pasted in under a name none of
 those patterns would match. It names the variable and never prints the value.
 
 The rule underneath all three: the Angular application never calls the Fauxnance API. Prices
 reach the browser through a service of yours that holds the key server-side.
 
-## The harness
+## Acceptance review
 
-`scripts/check.sh` reads every name it needs from `manifest.env`, so it asserts your design
-rather than dictating one.
+Your team must provide repeatable tests for the machine-checkable criteria.
+The review uses the paths recorded in `manifest.env`.
 
 **Static mode** is the default: no browser, no running stack. It installs from the lock file
 and builds the production bundle, confirms both generated clients are on disk with the
@@ -274,17 +273,17 @@ your unit suite and reads the names of the tests that ran for each half of the i
 rule, checks every code in the contracts against your mapping, and greps the built files for a
 key, a secret and the market-data address.
 
-**Live mode**, `scripts/check.sh --live`, needs your whole stack up and starts nothing itself.
+The live review needs your whole stack up and starts nothing itself.
 It confirms the three services answer, runs each journey on its own in its own process, then
 drives your sign-in form twice: once from a clean context straight at a guarded route to watch
 the redirect, and once signed in with every request recorded, to read where the bearer token
-went and where it did not. That probe is written into `E2E_DIR` and deleted when the harness
+went and where it did not. That probe is written into `E2E_DIR` and deleted when the review
 exits. Do not commit it.
 
 Live mode signs in several times over. If your Auth service throttles the login route, as
 Sprint 8 asked it to, the later attempts come back refused and read here as broken journeys.
-Set `LOGIN_THROTTLE_COOLDOWN_SECONDS` and the harness waits out your window before each
-sign-in. Do not weaken the throttle to make a harness pass.
+Set `LOGIN_THROTTLE_COOLDOWN_SECONDS` so the review can wait out your window before each
+sign-in. Do not weaken the throttle to make a test pass.
 
 Every skip is named and explained. A skip is honest; a green run against something that was not
 there is not. Passing is necessary and not sufficient: whether your messages are readable by a

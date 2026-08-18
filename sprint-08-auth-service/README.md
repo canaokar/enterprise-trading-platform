@@ -10,16 +10,14 @@ identity it can check on its own.
 
 That is why authentication is a service rather than a library. One process owns
 registration, login, hashing and the token lifecycle, and every other process
-verifies a signature with no network call and no shared database. The stub in
-`services/auth-stub` has stood in for that process since Sprint 6, with no
-database, no hashing and no refresh. This sprint retires it.
+verifies a signature with no network call and no shared database.
 
 ## A short week
 
 Two SME cloud sessions run on Monday and Tuesday, so the order of the work
 decides whether it fits. Take registration and login first, with the hashing and
 the uniform failure built in rather than retrofitted. Then the guard and
-`/auth/me`, then refresh, then the cutover, which needs the rest of the stack
+`/auth/me`, then refresh, then integration, which needs the rest of the stack
 up. Fill in the security review as each part lands.
 
 ## What you deliver
@@ -32,9 +30,9 @@ up. Fill in the security review as each part lands.
 | A guard protecting `/auth/me` | as above |
 | Jest suites, including the guard paths named below | alongside the code, as `*.spec.ts` |
 | A multi-stage `Dockerfile` | this folder |
-| Your service in the root `docker-compose.yml`, with the stub removed | repository root |
+| Your service added to the local orchestration | repository root |
 | The OWASP review, filled in | `security-review/` |
-| The manifest telling the check harness your names | `manifest.env` |
+| The manifest recording the names in your design | `manifest.env` |
 
 No starter code and no project skeleton ships. Deciding how this service is
 decomposed, and where the verification happens inside it, is most of what the
@@ -43,7 +41,7 @@ sprint assesses.
 ## The engineering contract
 
 Set one project up in this folder. Its internals are yours. Nine things are
-fixed, because the harness, the compose stack and your teammates depend on them.
+fixed, because reviewers and your teammates depend on them.
 
 - One NestJS project rooted in this folder, on Node 20 or later and TypeScript,
   where `npm ci`, `npm run build` and `npm test` all succeed on a machine that
@@ -65,24 +63,19 @@ fixed, because the harness, the compose stack and your teammates depend on them.
   between a laptop and a container read from the environment at runtime, and
   present in no committed file.
 - A multi-stage `Dockerfile` of your own design here, and the service joined to
-  the root `docker-compose.yml` in place of `auth-stub`, so that retiring the
-  stub is a configuration change in your Sprint 6 service rather than a code
-  change in it.
+  the local orchestration your team created.
 
 ```bash
 cd sprint-08-auth-service
 npm install                  # first run, and whenever you add a dependency
 npm run build
 npm test
-
-scripts/check.sh             # and --live once your stack is up
 ```
 
 ## The contract is the specification
 
-`contracts/auth-api.yaml` was written before either implementation existed and
-it binds both. Four operations, with paths, verbs, status codes and bodies
-fixed.
+`contracts/auth-api.yaml` is the binding specification. Four operations, with
+paths, verbs, status codes and bodies fixed.
 
 | Method | Path | Protected | Success | Documented failures |
 |---|---|---|---|---|
@@ -113,14 +106,12 @@ that depends on one is a service that breaks when you remove it.
 | `exp` | integer | Expiry, seconds since the Unix epoch. Fifteen minutes after `iat` |
 
 Those five are assessed. The contract defines one more, `iss`, carrying
-`auth-service` here and `auth-stub` in the fixture, so that during the cutover a
-team can decode a token and see which implementation signed it. Consumers must
-not require a particular value for it.
+`auth-service`. Consumers validate the configured issuer.
 
 Anything beyond those six is a finding, not a bonus. An email address in the
 payload is an email address published to every holder of the token, because the
 payload is base64 and not encryption: paste one into any decoder and read it.
-The harness decodes an access token and fails on any claim outside the set,
+The review decodes an access token and rejects any claim outside the set,
 because removing one after Sprint 9 has generated a client from it is not a
 configuration change.
 
@@ -140,7 +131,7 @@ Never log a password. The ways one reaches a log are all indirect: an error
 object serialised whole, a request body dumped by a debug interceptor, a DTO
 printed in a stack trace. Two habits make the rule structural. Log through one
 logger that redacts by key name at any depth, and never hand a whole request
-body to a log call. The harness reads your sources for a log call that names a
+body to a log call. The review searches your sources for a log call that names a
 credential field, which catches the direct case and none of the indirect ones.
 The indirect ones are what the review asks about.
 
@@ -157,7 +148,7 @@ presenting a value the service has stopped issuing. Revoking the presented token
 is optional here. If you build it, that token is dead in your store before the
 response is written and a second presentation answers `AUTH-401`. If you do not,
 write the decision and the risk it accepts in the security review, and declare it
-in `manifest.env` so that the harness asserts what you built.
+in `manifest.env` so that the decision is explicit.
 
 Reissue on its own defends against a stolen token used once. Suppose one is
 taken from a log, from browser storage, or from a proxy that recorded a request
@@ -195,7 +186,7 @@ paths do the same work: where the username is not found, verify the supplied
 password against a fixed dummy hash of the same algorithm and the same
 parameters, discard the result and return the same failure.
 
-The harness times both paths and applies two tests. The absolute threshold is
+The review times both paths and applies two tests. The absolute threshold is
 generous, because a laptop under load and a cold connection pool each move a
 response by tens of milliseconds. The second is on the shape rather than the
 size: one path taking twice as long as the other is an early return even when
@@ -207,32 +198,23 @@ throttle and declare it with `THROTTLE_COOLDOWN_SECONDS` and
 `UNIFORM_TIMING_ATTEMPTS`: a throttle limits how fast an attacker can use an
 oracle you left open, and does not close it.
 
-## Replacing the stub
+## Integrating the auth service
 
-The acceptance statement is that the Trade REST API needs no code change. Not a
-small one, and not only a configuration class: no Java changes. That is
-achievable because both implementations sign HS256 with the same `JWT_SECRET`
-and issue the same claims, so a token from either verifies with the code written
-in Sprint 6 against the fixture.
+The acceptance statement is that the Trade REST API needs no Java change. The
+Sprint 6 service already verifies the claims and algorithm in the contract and
+reads `JWT_SECRET` from configuration.
 
 | Change | Where |
 |---|---|
-| The compose service that answers on the auth port becomes yours, and the `auth-stub` service is removed | root `docker-compose.yml` |
-| Your service reads the same `JWT_SECRET` the Trade REST API verifies with | root `.env`, passed through compose |
-| The Trade REST API's issuer setting, if it pins one, names your issuer instead of the stub's | that service's configuration, from the environment |
+| Your service is added on the auth port | local orchestration |
+| Your service reads the same `JWT_SECRET` the Trade REST API verifies with | root `.env`, passed through local orchestration |
+| The Trade REST API's issuer setting names your issuer | that service's configuration, from the environment |
 | The database connection for the credential store | your service's environment |
 
 Nothing in that table is a Java file. If your Trade REST API needs a code change
-to accept a token from this service, something in it is coupled to the fixture
-rather than to the token: a hard-coded issuer string, a claim read with a name
-the stub happened to use, or a verifier that decodes the payload before checking
+to accept a token from this service, something in it is coupled to a test
+fixture rather than to the contract, or it decodes the payload before checking
 the signature.
-
-The stub's development secret is published in its own README, so anyone who has
-read this repository can mint a token your consumers accept for as long as that
-secret is in use. Keeping it is defensible in a training stack; rotating it once
-the stub is gone is the better habit. Declare which you chose under
-`STUB_SECRET_EXPECTATION` in `manifest.env`.
 
 ## Tests
 
@@ -252,7 +234,7 @@ check refuses first and which therefore passes against a guard with no expiry
 check at all. Build the wrong-signature case by signing a genuine, unexpired
 token with a different key.
 
-The harness runs your suite, reads the names of the tests that ran, and looks
+The review runs your suite, reads the names of the tests that ran, and looks
 for those two cases among the specs whose path matches `GUARD_SPEC_PATTERN`.
 Name your tests as you like and correct the patterns if the defaults do not
 reach them. Beyond the guard, expect to be asked at the review for tests
@@ -266,7 +248,7 @@ decorators on your controller and your DTOs. A YAML file maintained by hand
 beside the code drifts within a fortnight, and the document that matters
 describes what is deployed. Two paths are declared in `manifest.env`: the human
 page, `/docs` by default, and the JSON document, `/docs/json` by default. The
-harness fetches the JSON and confirms that it is an OpenAPI document describing
+review fetches the JSON and confirms that it is an OpenAPI document describing
 the four routes. It does not replace `contracts/auth-api.yaml`. It is the
 evidence that your code still matches it.
 
@@ -283,7 +265,7 @@ Every category carries a finding and a disposition, both written. A finding of
 beside it is indistinguishable from a category nobody looked at. A disposition of
 "accepted" needs the residual risk and why the team is carrying it. If you did
 not build revocation of the presented refresh token, A04 is where that decision
-and its risk are written. The harness checks that the cells are filled. Whether
+and its risk are written. The review checks that the cells are filled. Whether
 what is in them is true is read by your instructor.
 
 ## Acceptance criteria
@@ -294,8 +276,8 @@ These are the criteria your instructor assesses against.
    error envelope and every code in it.
 2. The access token carries exactly the claims contract: `sub`, `accountId`,
    `roles`, `iat`, `exp`, and the `iss` the contract also defines.
-3. Swapping the stub for this service is a configuration change only, with no
-   code change in the Trade REST API.
+3. Integrating this service requires configuration changes only, with no code
+   change in the Trade REST API.
 4. Passwords are hashed with argon2 or bcrypt, and never logged.
 5. Every refresh issues a new refresh token. Revoking the token that was
    presented is optional, and where it is not built the decision and the risk it
@@ -308,10 +290,10 @@ These are the criteria your instructor assesses against.
 9. The security review against the auth-related OWASP items is committed, with a
    finding and a disposition for every category.
 
-## The check harness
+## Acceptance review
 
-`scripts/check.sh` asserts the things a machine can assert, in two modes.
-**Static mode** is the default: no container, no database, no running service.
+Your team must provide repeatable tests for the machine-checkable criteria.
+Unit tests must run without a container, database or running service.
 
 | Check | What it proves |
 |---|---|
@@ -322,9 +304,8 @@ These are the criteria your instructor assesses against.
 | No log call in your sources names a credential field | Criterion 4, the never-logged half, in its direct form |
 | The security review exists, differs from the template, and every category carries a finding and a disposition | Criterion 9 |
 
-**Live mode**, `scripts/check.sh --live`, adds the probes. It needs your stack
-up: your service running against its store, and your Sprint 6 service running
-and pointed at it.
+The live review needs your service running against its store and your Sprint 6
+service pointed at it.
 
 | Probe | What it proves |
 |---|---|
@@ -332,31 +313,30 @@ and pointed at it.
 | A decoded access token, claim by claim | Criterion 2 |
 | A wrong password and an unknown user, compared on status, body and elapsed time | Criterion 6 |
 | One refresh, the token it returned, and then whatever `ROTATION_REVOCATION` declares | Criterion 5 |
-| The stored password hash, where your manifest tells the harness how to read it | Criterion 4, the algorithm half |
+| The stored password hash, where your manifest says how to read it | Criterion 4, the algorithm half |
 | A protected Trade REST API route with a token from this service, and with a token signed by a key it should not trust | Criterion 3, behaviourally |
 | The OpenAPI document, fetched from the running service | Criterion 8 |
 
 Criterion 5 is the one probe that reads a declaration rather than fixing the
-behaviour. Set `ROTATION_REVOCATION=enforced` and the harness presents the
+behaviour. Set `ROTATION_REVOCATION=enforced` and the reviewer presents the
 exchanged refresh token again and requires `AUTH-401`. Set it to `documented`
 and that probe is replaced by a check that your security review carries the
-decision in writing, with the harness printing what it would have probed on the
+decision in writing, with the review recording what it would have probed on the
 stricter setting. Both settings assert that a refresh returns a new refresh
 token and that the new one works.
 
-Criterion 3 is read with `git diff` at the design review, and the harness prints
-the command: no script can tell a configuration change from a code change that
-looks like one. Everything else it needs comes from `manifest.env`, so it
-asserts your design rather than dictating one.
+Criterion 3 is read with `git diff` at the design review. No script can tell a
+configuration change from a code change that looks like one. The remaining
+review values come from `manifest.env`.
 
-Passing is necessary and not sufficient. The harness reads structure and
+Passing is necessary and not sufficient. Automated checks read structure and
 behaviour at the edges, and cannot see whether a password reaches a log by an
 indirect route, whether the cost factors were chosen against anything, whether
 the refresh decision your manifest declares is one the team reasoned about, or
 whether the uniform failure holds because both paths do the same work rather
 than because the machine was quiet. All four are read at the review.
 
-Bring to it: the running stack with the stub removed, one token decoded
+Bring to it: the running stack, one token decoded
 in front of the panel, your refresh traced through your store, the `git diff`
 showing no Java changed, and your answer to what you would do at 09:00 on the
 morning somebody reports a stolen refresh token.

@@ -25,7 +25,7 @@ came first.
 | Business rules 1 to 8, in the domain | as above |
 | JUnit 5 tests, written first | `src/test/java/` |
 | A UML class diagram and an order placement sequence diagram | `design/` |
-| The manifest telling the check harness your names | `manifest.env` |
+| The manifest recording the names in your design | `manifest.env` |
 
 There are no stubs. Designing these types from the requirements is the
 assessment.
@@ -33,7 +33,7 @@ assessment.
 ## The engineering contract
 
 No project skeleton ships with this sprint. Set one up. Five things about it are
-fixed, because the harness and your teammates both depend on them:
+fixed, because reviewers and your teammates both depend on them:
 
 - One Maven project rooted in this folder, on Maven 3.9 or later.
   `mvn clean test-compile` succeeds in it on a machine that has never seen your
@@ -48,18 +48,16 @@ fixed, because the harness and your teammates both depend on them:
   as hibernate-validator is permitted in test scope if you want a validator to
   run in your tests.
 - Nothing else. Spring, a servlet API, a JDBC driver, MyBatis and HikariCP fail
-  the harness the moment one of them reaches the dependency tree, including
+  the build the moment one of them reaches the dependency tree, including
   transitively.
 
 The coordinates are yours, and Sprint 6 resolves this module from your local
 Maven repository by them, so `mvn install` here runs before `mvn package` there.
 Ban the forbidden dependencies in your own build too, with the enforcer plugin's
-`bannedDependencies` rule: a failing build tells you sooner than the harness
-does, and tells whoever added the dependency why.
+`bannedDependencies` rule, so a failing build tells whoever added the
+dependency why.
 
 ```bash
-sprint-05-domain-engine/scripts/check.sh    # the acceptance harness
-
 cd sprint-05-domain-engine
 mvn test                                    # the suite
 mvn install                                 # publish to your local repository
@@ -122,8 +120,7 @@ Sprint 9, so a renamed or extra literal breaks three places at once.
 the suspension is reversible. `CLOSED` accounts never trade again and are never
 deleted. `NEW` is the working state and the other three are terminal. There is no
 partial-fill literal, which is why the Trade Executor fills in full or rejects.
-Spell `CANCELLED` with two `L`s, the literal the harness most often reports
-missing.
+Spell `CANCELLED` with two `L`s.
 
 ### The order request DTO
 
@@ -173,8 +170,8 @@ Rules 4 and 5 then need a decision from you: `VAL-422` is a documented outcome o
 order placement and the list of six has no member for a quantity or a price out
 of range. Adding a type is a reasonable answer, and so is an argument that
 validation alone covers it, provided you can say what happens when the caller is
-the Trade Executor replaying an order and never ran a validator. The harness
-reads the six names from `manifest.env` and does not check additions of your own.
+the Trade Executor replaying an order and never ran a validator. Record the six
+names in `manifest.env`; additions of your own are allowed.
 
 ## Business rules 1 to 8
 
@@ -234,7 +231,7 @@ target, so write the other classes the entities need.
 | `OrderLogicTest` | Business rules 1 to 8, each one firing and each one not firing, plus the evaluation order itself |
 | `PlaceOrderRequestValidationTest` | Every constraint on the DTO, including the boundary either side of each limit |
 
-The harness requires at least 24 tests across those three, which is arithmetic
+At least 24 tests are required across those three, which is arithmetic
 rather than ambition: eight rules firing and eight not firing is 16 in
 `OrderLogicTest` alone, and six DTO fields is six more.
 
@@ -273,11 +270,10 @@ These are the criteria your instructor assesses against.
    green.
 8. UML class and sequence diagrams are committed and match the code.
 
-## The check harness
+## Acceptance review
 
-`scripts/check.sh` asserts the things a machine can assert. Run it as often as
-you like: no database, no container, and no call to Fauxnance, so it costs
-nothing against your quota.
+Your team must provide repeatable tests for the machine-checkable criteria.
+They need no database, container or Fauxnance call.
 
 | Check | What it proves |
 |---|---|
@@ -298,9 +294,9 @@ than your source, so a literal commented out, declared in a string or spelled
 differently in two places is caught rather than matched, and a failure names the
 literal that is missing and the one it found instead.
 
-### What passing does not mean
+### Limits of automated tests
 
-The harness counts tests, it does not read them: a test that asserts nothing
+The review counts tests, it does not read them: a test that asserts nothing
 passes here. It confirms that eight rules could be implemented, and it has never
 placed an order. Assessed by a human at the design review and not by this script:
 

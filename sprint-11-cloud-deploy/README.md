@@ -33,7 +33,7 @@ The material is fixed for the week. If you find something in it that is wrong, w
 you found and what you did instead, keep going, and hand that note in with the deployment. A
 correction is useful. A team stopped for a day waiting for one is not.
 
-## Do not start this week with a red Sprint 10 harness
+## Do not start this week with failing Sprint 10 tests
 
 The prerequisite for this week is a Sprint 10 build that passes its own tests and a local Docker
 Compose stack that starts cleanly. That is a gate, not a recommendation.
@@ -41,17 +41,12 @@ Compose stack that starts cleanly. That is a gate, not a recommendation.
 Every verification in this week runs against the platform you already have. Day 4 asks you to
 sign in, place an order and watch it fill, driven from a page served by a CDN. If the stack
 behind that page is broken, you will be debugging Sprint 10 with an AWS distribution in front of
-it, and you will not be able to tell which layer is at fault. Fix the red harness first, on the
+it, and you will not be able to tell which layer is at fault. Fix the failing tests first, on the
 Monday morning if that is what it takes, and treat the day you spend on it as cheaper than the
 two days it costs later.
 
-Confirm both before Step 1 of the runbook:
-
-```bash
-docker compose up -d
-docker compose ps
-sprint-10-extension-service/scripts/check.sh --live
-```
+Before Step 1 of the runbook, start the local stack using your team's
+documented command and run the Sprint 10 tests.
 
 Nothing this week stops, restarts or reconfigures a container you did not start yourself. The
 deployment changes what serves the browser, not what the browser talks to.
@@ -147,7 +142,7 @@ Two rules on the credentials themselves, and neither is negotiable.
 
 **No long-lived key goes into the repository, ever, in any branch.** Not in a config file, not
 in a `.env` that slipped past `.gitignore`, not in a comment, not in a screenshot pasted into a
-document, not in a test fixture. The harness searches your working tree for the shape of an
+document, not in a test fixture. Your secret scan must search the working tree for the shape of an
 access key, and it searches the recorded history of this folder as well, because a key that was
 committed and then deleted is still a disclosed key.
 
@@ -243,20 +238,16 @@ user, in that order, and then checks each one is gone.
 README.md                 this brief
 RUNBOOK.md                the week, in order, with the failure modes
 iam/policy-skeleton.json  the shape of the deploy policy, ARNs as placeholders
-manifest.env              the names the harness reads
-scripts/check.sh          the acceptance harness
+manifest.env              the deployment and review values chosen by your team
 ```
 
 Your deployment entry point does not live here. A script belongs at a sensible path in the
 repository, and `deploy/deploy-ui.sh` is the one the runbook uses. Name its path in
-`manifest.env` so the harness finds it.
+`manifest.env` so reviewers can find it.
 
-## The harness
+## Acceptance review
 
-```bash
-sprint-11-cloud-deploy/scripts/check.sh
-sprint-11-cloud-deploy/scripts/check.sh --live
-```
+Your team must provide repeatable checks for the machine-checkable criteria.
 
 Static mode reads `manifest.env`, checks the shape of your declared bucket name and distribution
 domain, confirms your deployment entry point exists at the path you declared and covers the
@@ -272,8 +263,8 @@ would.
 
 Two things about it are worth saying plainly.
 
-It is lighter than every harness before it. Most of what this week is assessed on happens in an
-AWS account the harness has no credentials for. It cannot see your origin access control, it
+Most of what this week is assessed on happens in an AWS account that automated
+checks have no credentials for. They cannot see your origin access control, they
 cannot see your IAM policy, it cannot see whether a human approved a deploy, and it cannot sign
 in.
 
@@ -298,8 +289,8 @@ something that was not there is not.
 
 ## What a person assesses
 
-Say it plainly, because the harness is short enough to be mistaken for the assessment. The
-harness can tell you that a URL answered, that a bucket refused, that a file exists and mentions
+Automated checks are not the assessment. They can tell you that a URL answered,
+that a bucket refused, that a file exists and mentions
 three stages, and that no key-shaped string is in your tree.
 
 Everything the criteria turn on is read by a person, afterwards, from what you left behind.

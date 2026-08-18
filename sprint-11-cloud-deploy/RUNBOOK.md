@@ -79,24 +79,18 @@ Commands are run from the repository root unless a step says otherwise.
 
 ## Step 1. Confirm the prerequisite before anything else
 
-**Do**
+**Do** start the local stack using your team's documented command, then run
+the Sprint 10 tests.
 
-```bash
-docker compose up -d
-docker compose ps
-sprint-10-extension-service/scripts/check.sh --live
-```
-
-**Success looks like** every container in `docker compose ps` with state `running`, and the
-Sprint 10 harness reporting no failures.
+**Success looks like** every service reporting healthy and the Sprint 10 tests passing.
 
 **If that is not what happened**
 
-- **A container is not running, or the harness fails.** Stop the cloud week here and fix it.
+- **A service is not running, or a test fails.** Stop the cloud week here and fix it.
   Everything from Step 15 onwards verifies against this stack, and debugging it through a CDN is
   several times harder than debugging it now.
-- **The harness fails only on a live probe that needs Kafka.** Give the stack a minute after
-  `docker compose up -d` and run it again. Consumers take time to join.
+- **A live test that needs Kafka fails.** Give the stack a minute and run it again. Consumers
+  take time to join.
 
 Nothing after this step stops, starts or reconfigures a container. If you did not start it, do
 not touch it.
@@ -461,14 +455,8 @@ The region, the bucket name and the distribution id are not secrets. Pass them t
 as arguments, or export them in the shell that runs it, so that the real secrets are easy to
 find.
 
-**Success also looks like** a clean run of:
-
-```bash
-sprint-11-cloud-deploy/scripts/check.sh
-```
-
-which searches your working tree and this folder's history for anything key-shaped. Run it now,
-while a mistake is one file old.
+**Success also looks like** a clean secret scan of your working tree and this
+folder's history. Run it now, while a mistake is one file old.
 
 **If that is not what happened**
 
@@ -477,7 +465,7 @@ while a mistake is one file old.
   `aws iam delete-access-key --user-name <DEPLOY_USER> --access-key-id <KEY_ID>`.
 - **You closed the terminal before saving the secret.** It cannot be recovered. Delete that key
   and create another. That is the correct response and it costs a minute.
-- **The harness reports an access key id in the tree.** Treat it as disclosed. Deactivate and
+- **The scan reports an access key id in the tree.** Treat it as disclosed. Deactivate and
   delete the key in IAM first, then take it out of the file, then create a new one. That order
   is not negotiable: removing it from the file first leaves a live credential in the history.
 
@@ -641,7 +629,7 @@ grep -rIEil 'x-api-key|api[_-]key|fauxnance|jwt[_-]?secret|execute-api\.[a-z0-9-
 
 - **A file is named.** Do not upload. Find the value, take it out of the source, and if it is a
   real Fauxnance key or a real signing secret, have it rotated today. Removing it from the next
-  build does not undo a disclosure, and the harness scans the deployed copy at Step 33 anyway.
+  build does not undo a disclosure. Scan the deployed copy again at Step 33.
 - **A match that is a false positive**, a variable named `apiKey` that holds nothing, for
   instance. Read the surrounding text and satisfy yourself. Then rename it, because the next
   person to run this grep will stop on it too.
@@ -1111,7 +1099,7 @@ unaided, from a clean checkout, with only their AWS profile configured.
 **If that is not what happened**
 
 - **The script has a key in it.** Take it out and rotate the key. It goes in your AWS profile,
-  and `sprint-11-cloud-deploy/scripts/check.sh` will find it if it stays.
+  and your secret scan must find it if it stays.
 - **The script only works from one directory.** Resolve paths from the script's own location
   rather than from the caller's working directory.
 - **You cannot decide where the script should live.** Put it at `deploy/deploy-ui.sh`. You can
@@ -1150,18 +1138,13 @@ property that makes a deploy something you can do on a Friday afternoon.
 - **The build fails on a teammate's machine but not yours.** That is what `npm ci` and a
   committed lock file are for. Check both are in the script and in the repository.
 
-## Step 33. Fill in the manifest and run the harness
+## Step 33. Fill in the manifest and run the deployment checks
 
 **Do** edit `sprint-11-cloud-deploy/manifest.env` and set `CLOUDFRONT_DOMAIN`, `BUCKET_NAME`,
 `AWS_REGION` and `DEPLOY_ENTRYPOINT`. The domain is a hostname with no scheme and no trailing
 slash. The entry point is a path relative to the sprint folder, so `../deploy/deploy-ui.sh`.
 
-```bash
-sprint-11-cloud-deploy/scripts/check.sh
-sprint-11-cloud-deploy/scripts/check.sh --live
-```
-
-**Success looks like** no failures in either mode. Live mode loads your application over HTTPS,
+**Success looks like** no failures in your static or live checks. The live check loads your application over HTTPS,
 is refused by both of your bucket's endpoints, and reads the JavaScript your distribution serves.
 
 **If that is not what happened**
@@ -1170,13 +1153,13 @@ is refused by both of your bucket's endpoints, and reads the JavaScript your dis
   lists them.
 - **The domain check fails on shape.** You have put `https://` or a trailing slash in
   `CLOUDFRONT_DOMAIN`. Hostname only.
-- **A stage is reported missing from your entry point.** The harness greps for the shape of each
+- **A stage is reported missing from your entry point.** The review searches for the shape of each
   stage. Either the stage is genuinely absent, or your deploy does it differently, in which case
   widen the pattern in `manifest.env` and be able to justify it.
 - **A live probe fails on the first run.** Run it again before debugging it. A distribution that
   has just changed and an invalidation in flight both produce odd answers for a few minutes.
 - **The bucket probe reports 404 `NoSuchBucket` or a redirect.** `BUCKET_NAME` or `AWS_REGION`
-  in the manifest is wrong. The harness is addressing something that is not your bucket.
+  in the manifest is wrong. The check is addressing something that is not your bucket.
 
 ## Step 34. Verify the authenticated flows against the deployed URL
 
@@ -1255,13 +1238,8 @@ the repository has to answer it.
 - The cross-origin change from Step 17.
 - Decision-log entries for Step 15 and Step 34.
 
-Then:
-
-```bash
-sprint-11-cloud-deploy/scripts/check.sh
-```
-
-**Success looks like** a green static run, including the history scan, on the merged branch.
+Then run your static deployment checks, including the history scan, on the
+merged branch.
 
 **If that is not what happened**
 

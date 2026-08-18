@@ -20,11 +20,11 @@ way.
 
 Filled in, a row looks like this. The claim is invented and out of domain
 deliberately, so that copying it gets you nothing. It is numbered `x` rather
-than with a digit so that the harness does not read it as one of yours:
+than with a digit so that reviewers do not read it as one of yours:
 
 | x | Complaints about the mid-range laptop range doubled in the month after the March firmware update and have not fallen back since. | report.html#laptop-complaints |
 
-Add rows past the third if you have more, numbered in sequence. The harness
+Add rows past the third if you have more, numbered in sequence. The review
 reads every row whose number is a digit, counts the ones that are filled in,
 and checks that each named artefact exists. Whether the claim is true, whether
 the chart supports it, and whether a non-technical reader can read the chart

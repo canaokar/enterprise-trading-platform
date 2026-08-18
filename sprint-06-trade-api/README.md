@@ -27,8 +27,8 @@ order this service accepted and the executor then refused.
 | JWT verification on every `/api/v1/**` route | as above |
 | Tests, unit and slice, that run without a container | `src/test/java/` |
 | A multi-stage `Dockerfile` | this folder |
-| Your service added to the root `docker-compose.yml` | repository root |
-| The manifest naming your design for the harness | `manifest.env` |
+| Your service added to the local orchestration | repository root |
+| The manifest recording the names in your design | `manifest.env` |
 
 No starter code and no stubs ship. Deciding what belongs in which layer is most
 of what this sprint assesses.
@@ -36,7 +36,7 @@ of what this sprint assesses.
 ## The engineering contract
 
 No project skeleton ships either. Set one up. Six things about it are fixed,
-because the harness, the compose stack and your teammates all depend on them:
+because reviewers and your teammates all depend on them:
 
 - One Maven project rooted in this folder, on Maven 3.9 or later and Java 21.
   `mvn clean verify` succeeds in it on a machine that has never seen your code.
@@ -50,10 +50,9 @@ because the harness, the compose stack and your teammates all depend on them:
   package you declare, with controllers in one sub-package and mappers in
   another. Both are declared too: the layering checks find them by name.
 - A multi-stage `Dockerfile` of your own design, in this folder.
-- The service joined to the root `docker-compose.yml` under the `platform`
-  profile, so that `docker compose up -d` stays the infrastructure command.
+- The service joined to the local orchestration your team created.
 
-Three boundaries inside that, stated as the harness reads them. Controller
+Three boundaries inside that are fixed. Controller
 sources import nothing from your mapper package, `java.sql`, `javax.sql`,
 MyBatis, Spring JDBC or a persistence API, and hold no SQL string. The Sprint 5
 artefact on the compile classpath references no servlet, Spring or MyBatis type,
@@ -67,7 +66,6 @@ cd sprint-05-domain-engine && mvn install   # publish the domain module first
 
 cd sprint-06-trade-api
 mvn clean verify
-scripts/check.sh                            # and --live once your stack is up
 ```
 
 ## The contract is the specification
@@ -137,7 +135,7 @@ statement, and the positions that come back are whichever account the attacker
 asked for. That is OWASP A03, injection, and the outside values here include an
 account key, a symbol, a status filter and two timestamps.
 
-The harness fails the build on any `${}` in a mapper. One use is legitimate, a
+The review rejects any `${}` in a mapper. One use is legitimate, a
 column name or sort direction that cannot be a bind parameter, and only when the
 value is checked against a fixed list of permitted names first. Declare it in
 `MAPPER_SQL_INTERPOLATION_ALLOWLIST` in `manifest.env`, with a comment saying
@@ -165,13 +163,12 @@ with the row, and return the affected row count, because a mapper returning
 applies behind `DELETE /api/v1/orders/{id}`: make the transition conditional on
 the state you expect, in one statement.
 
-## The auth stub
+## Authentication during Sprint 6
 
-`services/auth-stub` is provided. It is a fixture, not a deliverable: nothing in
-it is assessed and nothing in it is to be modified. It exists because Sprint 6
-has to verify a real token and Node is not taught until Sprint 8. It starts with
-the infrastructure on `docker compose up -d`, and `services/auth-stub/README.md`
-lists the five demo users, the claims and the shared signing secret.
+No token issuer is supplied. Build tests that mint signed tokens with a
+team-owned test fixture and verify them through the same production code path.
+The fixture must follow `contracts/auth-api.yaml` and must not be deployed as a
+service. Sprint 8 adds the real auth service.
 
 Verification means checking the signature, the expiry and the algorithm the
 token asks for, in that order, before reading a claim. A verifier that decodes
@@ -184,13 +181,11 @@ Whether that caller may reach the account is answered where the account key is
 known, and the answer is `ACC-403` with the same message a suspended account
 gets, so that nobody can enumerate keys.
 
-Sprint 8 replaces the stub with the real service. The claims, the algorithm and
-the secret are identical by design, so the swap is a configuration change and no
-code here is expected to move. If yours needs a code change, something is
-coupled to the stub rather than to the token, and that is worth finding now
-rather than in week 7.
+When Sprint 8 adds the auth service, only configuration should change. If Java
+code has to move, this service is coupled to an implementation detail rather
+than to the token contract.
 
-## The Dockerfile and the compose entry
+## The Dockerfile and local orchestration
 
 A single-stage build ships the image that built the service: Maven, a full JDK,
 the dependency cache and your source. The reason to care is not disk. Every tool
@@ -204,18 +199,17 @@ with an empty `~/.m2` and cannot reach the Sprint 5 module on your laptop, so it
 builds both projects, both folders sit inside the build context, and Docker
 cannot copy from above its context.
 
-Adding the service to `docker-compose.yml` is your change. A correct entry:
+Adding the service to your local orchestration is your change. It needs:
 
 | Needs | Because |
 |---|---|
 | A `build` block with the context and the Dockerfile path | The image is built from source, not pulled |
-| `profiles: [platform]` | It starts with `--profile platform`, alongside the other services you write, not with the bare infrastructure |
-| `networks: [trading-net]` | It resolves `postgres` and `auth-stub` by service name |
+| A shared service network | It resolves Postgres by service name |
 | A published port for the service port | `curl` from the host reaches it |
 | Database host, port, name, user and password from the environment | `localhost` inside a container is the container |
-| `JWT_SECRET` passed through from `.env` | It has to be the secret the stub signed with |
+| `JWT_SECRET` passed through from `.env` | Test tokens and the later auth service use the same configured value |
 | `depends_on` Postgres, on its health condition | Starting before the database is ready is a crash loop, not a failure |
-| A health check | `docker compose ps` should say the service is up, not merely running |
+| A health check | The orchestrator should report the service as healthy, not merely running |
 
 Nothing this sprint needs Kafka.
 
@@ -227,7 +221,7 @@ nothing about your schema, your Sprint 5 module or the contract unless you open
 those files beside the one you are writing. What it produces is assessed exactly
 as anything you typed: against the error catalogue, the layering rules and the
 parameterisation scan. A generated mapper interpolating a symbol with `${}`
-fails the harness under your name. Read each suggestion, and be able to say why
+fails the review under your name. Read each suggestion, and be able to say why
 the line is there.
 
 ## Acceptance criteria
@@ -245,11 +239,11 @@ These are the criteria your instructor assesses against.
 7. A protected route rejects a missing or invalid token with `AUTH-401`.
 8. The service builds and runs from a multi-stage Dockerfile.
 
-## The check harness
+## Acceptance review
 
-`scripts/check.sh` asserts the things a machine can assert, in two modes.
-**Static mode** is the default: no container, no database, no running service
-and no call to the Fauxnance API, so run it as often as you like.
+Your team must provide repeatable tests for the machine-checkable criteria.
+Unit and slice tests must run without a container, database, running service or
+Fauxnance call.
 
 | Check | What it proves |
 |---|---|
@@ -263,31 +257,24 @@ and no call to the Fauxnance API, so run it as often as you like.
 | `Dockerfile` has more than one stage, and its final stage is not a build image | Criterion 8 |
 | The account version column appears in a mapper that updates | Criterion 6, the static half |
 
-**Live mode** adds the endpoint probes. It needs your stack up: your schema and
-seed data applied, the auth stub running, and your service reachable.
-
-```bash
-docker compose --profile platform up -d --build
-scripts/check.sh --live
-```
+The live review uses your running stack with your schema and seed data applied.
 
 | Probe | What it proves |
 |---|---|
-| A token is obtained from the auth stub and accepted | Criterion 7, the positive half |
+| A valid test token is accepted | Criterion 7, the positive half |
 | A missing token and a tampered token on a protected route | Criterion 7: both `AUTH-401`, both in the envelope |
 | All six endpoints answer with the status and body shape the contract states | Criterion 1 |
 | An unknown account, an unknown instrument, an inactive account, an unaffordable buy, a reused idempotency key and an invalid field | Criterion 1, the catalogue half |
 | Several concurrent orders against one account, reconciled against the cash | Criterion 6, behaviourally: a lost update shows up as cash that did not move |
 
-Both modes read your names from `manifest.env`, so the harness asserts your
-design rather than dictating one. Live mode assumes nothing about your schema:
-it goes through your API, and needs only the demo user whose token reaches an
+The review uses the names in `manifest.env`. It assumes nothing about your
+schema: it goes through your API and needs only the demo user whose token reaches an
 active account, the one whose account you seeded inactive, and a symbol you
 seeded as tradable.
 
-### What passing does not mean
+### Limits of automated tests
 
-The harness reads structure, not meaning. It confirms that a mapper binds its
+Automated checks read structure, not meaning. They confirm that a mapper binds its
 parameters without knowing whether the statement is right, and that an
 annotation is present without knowing whether the boundary is where it should
 be. Assessed by a human at the review, and not by this script:

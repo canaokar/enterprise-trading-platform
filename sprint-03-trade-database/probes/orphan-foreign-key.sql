@@ -5,11 +5,11 @@
 -- against an account key nobody holds is the obvious choice, and an order in
 -- an instrument that was never created works equally well.
 --
--- The harness wraps this file in BEGIN and ROLLBACK, so it leaves nothing
--- behind, and it runs after the seed data has loaded. Pick a parent value that
+-- Run this file inside BEGIN and ROLLBACK so it leaves nothing behind. Run it
+-- after the seed data has loaded. Pick a parent value that
 -- the data in seed/ certainly does not contain.
 --
--- The harness expects SQLSTATE 23503, foreign key violation. Any other outcome
+-- Expect SQLSTATE 23503, foreign key violation. Any other outcome
 -- is a finding:
 --
 --   the insert succeeds         the relationship is not enforced by a foreign

@@ -36,14 +36,14 @@ and fits alongside the last day.
 
 | Deliverable | Where |
 |---|---|
-| Three topics, with the keys and partition counts the contract fixes | `infra/kafka/create-topics.sh` creates them, the decisions are yours |
+| Three topics, with the keys and partition counts the contract fixes | topic creation owned by your team |
 | Characterisation tests pinning your Sprint 6 order placement, committed first | inside `sprint-06-trade-api/` |
 | A change to that service: record the order, publish it, answer `NEW` | `sprint-06-trade-api/` |
 | The Trade Executor: consume, price, fill or reject, settle, publish | `executor/` |
 | The market-data poller: batched quotes onto `market-data` | `poller/` |
 | One incremental load into `FACT_TRADES` and its dimensions | `etl/` |
 | A SonarQube gate passing on the Java service and the pipeline | your local SonarQube |
-| The manifest naming your design for the harness | `manifest.env` |
+| The manifest recording the names in your design | `manifest.env` |
 
 No starter code and no project skeleton ships. Deciding how the executor is
 decomposed, and where the fill rule lives inside it, is most of what this
@@ -52,7 +52,7 @@ sprint assesses.
 ## The engineering contract
 
 Set up three projects in this folder. Their internals are yours. Six things
-about them are fixed, because the harness, the compose stack and your teammates
+about them are fixed, because reviewers and your teammates
 all depend on them.
 
 - The Trade Executor is one Maven project rooted at `executor/`, on Java 21 and
@@ -61,16 +61,15 @@ all depend on them.
   `mvn clean verify` succeeds in it on a machine that has never seen your code.
 - Every executor instance joins the consumer group `trade-executor`. The
   contract fixes that name because `orders` is a work queue with exactly one
-  logical consumer group, and the harness asks the broker who is reading it.
+  logical consumer group, which is checked at review.
 - The poller is one Python project rooted at `poller/` and the pipeline is one
   rooted at `etl/`, both on Python 3.12 or later, importable from `src/` and
   installable from their own `pyproject.toml`, with the poller's tests in
   `poller/tests/`. Both declare their test dependencies under a `dev` optional
-  dependency group, because the harness installs `poller[dev]` and `etl[dev]`
-  into an environment with nothing in it, which is the state a teammate cloning
-  the repository starts from.
-- The executor and the poller join the root `docker-compose.yml` under the
-  `platform` profile, as the Trade REST API did in Sprint 6. Both need
+  dependency group, because both must install into an empty environment, which
+  is the state a teammate cloning the repository starts from.
+- The executor and the poller join the local orchestration your team created.
+  Both need
   `KAFKA_BOOTSTRAP_SERVERS` pointing at `kafka:29092` and `FAUXNANCE_API_KEY`
   from `.env`; the executor also needs the database variables and a
   `depends_on` for Postgres on its health condition.
@@ -81,16 +80,14 @@ all depend on them.
   rejected, arrive as a migration in the same folder and style as your Sprint 3
   migrations. The analytical model needs the executed price too.
 
-```bash
-docker compose up -d                          # infrastructure and the topics
+Start the local stack using your team's documented command. Then run:
 
+```bash
 cd sprint-07-event-backbone/executor && mvn clean verify
 
 cd .. && python3 -m venv .venv
 .venv/bin/python -m pip install -e 'poller[dev]' -e 'etl[dev]'
 .venv/bin/python -m pytest poller etl
-
-scripts/check.sh                              # and --live once the stack is up
 ```
 
 ## The three topics
@@ -120,10 +117,11 @@ history splits from that point onwards. Three on `orders` lets three executor
 instances share the work and shows that a consumer group cannot usefully exceed
 the partition count.
 
-`infra/kafka/create-topics.sh` creates all three explicitly once the broker is
-healthy, along with the three `<topic>.DLT` dead-letter topics. Auto-creation
-is switched off because it produces a one-partition topic with the wrong
-retention and nothing tells you it happened. Serialisation is JSON, and every
+Create all three topics explicitly once the broker is healthy, along with the
+three `<topic>.DLT` dead-letter topics. Auto-creation must be switched off
+because it produces a one-partition topic with the wrong retention and nothing
+tells you it happened. The creation command or script is a team deliverable.
+Serialisation is JSON, and every
 message carries the same five-field envelope on all three topics, so one
 deserialiser and one dead-letter handler cover the platform. Consumers ignore
 fields they do not recognise: one that fails on an unknown field turns an
@@ -170,7 +168,7 @@ back for an order the account can afford, field by field, including the status.
 Which error code and which HTTP status come back for a reused idempotency key,
 an unaffordable buy, an unknown symbol, an account that is not `ACTIVE`. What
 is written to the order row, the cash and the position when an order is
-accepted. Three tests is the floor the harness enforces and it is a floor
+accepted. Three tests is the required floor and it is a floor
 rather than a target. Write them against your own service in
 `sprint-06-trade-api`, keep them in one package of their own so that the
 history reads clearly, and name that package in `CHARACTERISATION_TEST_DIR` in
@@ -181,7 +179,7 @@ behaviour you are altering deliberately, so change that test in the same commit
 as the change and say so in the message. That is a different act from the tests
 silently going green again.
 
-### The rule the harness enforces, exactly
+### The characterisation-test history rule
 
 The first commit that adds a file under `CHARACTERISATION_TEST_DIR` has to be a
 proper ancestor of the first commit, after this sprint folder arrived in the
@@ -190,7 +188,7 @@ repository, that changes anything under `sprint-06-trade-api/src/main/java`.
 Tests and a change to the service in the same commit do not satisfy it. Neither
 does a history where the service was changed first and pinned afterwards. Both
 are reported by name, with the commits, so there is no guessing about which
-commit the harness objected to. Commit in small pieces: a history of one commit
+commit the review objected to. Commit in small pieces: a history of one commit
 per week cannot show this and cannot show anything else either.
 
 ## The Trade Executor
@@ -291,8 +289,8 @@ Then show four things: the balance before, the balance after, the log line
 where the executor recognised the duplicate and did nothing, and that no second
 message appeared on `trade-events`, because a consumer that believes the order
 happened twice is the same bug one service further downstream.
-`scripts/check.sh --live` runs exactly this probe, and being able to run the
-script is not the same as being able to give the demonstration.
+Your integration tests must run exactly this probe. Passing them is not the
+same as being able to give the demonstration.
 
 ### Failure handling
 
@@ -381,7 +379,7 @@ placeholder dimension row to make an unresolved key pass: that hides the fault,
 which is almost always that the dimension load was skipped.
 
 The store is your choice: the schema is plain ANSI SQL and runs on DuckDB,
-SQLite or Snowflake, which is why the harness asks for three commands in
+SQLite or Snowflake, which is why the manifest records three commands in
 `manifest.env`.
 
 ## SonarQube
@@ -416,8 +414,8 @@ On Linux, `host.docker.internal` does not resolve: add `--network host` and use
 passing: no new blocker or critical issue, no new security hotspot left
 unreviewed, and duplication and coverage on new code inside the thresholds.
 Passing by marking findings as "won't fix" is visible in the dashboard and is
-not passing. `scripts/check.sh` does not run SonarQube, so the gate is checked
-at the review, on your screen, on the project you scanned.
+not passing. The gate is checked at the review, on your screen, on the project
+you scanned.
 
 ## Acceptance criteria
 
@@ -438,12 +436,10 @@ These are the criteria your instructor assesses against.
 8. Characterisation tests written around your Sprint 6 service before it is
    changed.
 
-## The check harness
+## Acceptance review
 
-`scripts/check.sh` asserts the things a machine can assert, in two modes.
-**Static mode** is the default: no container, no broker, no database, and no
-call to the Fauxnance API. Add `--reuse` to keep the scratch Python environment
-between runs.
+Your team must provide repeatable tests for the machine-checkable criteria.
+Unit tests must run without a container, broker, database or Fauxnance call.
 
 | Check | What it proves |
 |---|---|
@@ -455,13 +451,11 @@ between runs.
 | The first test commit precedes the first change to your Sprint 6 sources | Criterion 8, the half that is the whole point |
 | No Fauxnance key literal anywhere in this folder | The key is not in the repository |
 
-**Live mode**, `scripts/check.sh --live`, adds the probes. It needs the whole
-stack: the broker with the topics, your schema and seed data, the auth stub,
-your Trade REST API, your executor and your poller. It writes to that stack,
-which is why it is not the default: it places one order, produces one message
-back onto `orders`, and inserts one row into your `orders` table and removes it
-again. Both statements are in `manifest.env` and both are yours to correct if
-your schema spells anything differently.
+The live review needs the whole stack: the broker with the topics, your schema
+and seed data, your Trade REST API, your executor and your poller. It places one
+order, produces one message back onto `orders`, and inserts one row into your
+`orders` table and removes it again. Both statements are in `manifest.env` and
+both are yours to correct if your schema spells anything differently.
 
 | Probe | What it proves |
 |---|---|
@@ -472,17 +466,15 @@ your schema spells anything differently.
 | No second event for that order on `trade-events` | Criterion 4, one service downstream |
 | A quote arrives on `market-data` within one polling interval, and how many distinct symbols came with it | Criterion 5, as evidence |
 | `FACT_TRADES` grows after a load, and does not grow after a second load with no new data | Criterion 6, and idempotency |
-| A row the harness plants lands in the dead-letter path and not in the fact table | Criterion 6 |
+| A deliberately bad row lands in the dead-letter path and not in the fact table | Criterion 6 |
 
-The harness reads your names, your topics, your consumer group and the three
-pipeline commands from `manifest.env`, so it asserts your design rather than
-dictating one, and where a design choice makes a probe inapplicable it says so
-and names the reason. The batch size is the one criterion no static check can
+The review uses your names, topics, consumer group and three pipeline commands
+from `manifest.env`. The batch size is the one criterion no static check can
 reach without dictating how you write the poller, so live mode reports how many
 distinct symbols arrived in one cycle instead, and the cap at 25 is read at the
 review.
 
-Passing is necessary and not sufficient. The harness confirms that the same
+Passing is necessary and not sufficient. Automated checks confirm that the same
 message twice moved no money in one run, without knowing whether the mechanism
 holds under load, and that a row was dead-lettered, without reading the reason
 recorded with it. It runs your characterisation tests, it does not read them. A

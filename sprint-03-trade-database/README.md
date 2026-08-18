@@ -127,12 +127,11 @@ Choose types that represent money exactly and apply them consistently.
 | Index justifications, one named query per index | `design/indexes.md` |
 | Your normalisation notes and any deliberate denormalisation | `design/` |
 | The historical trade data design | `DESIGN.md` |
-| The manifest that tells the check harness your names | `manifest.env` |
-| Two probe statements for the harness | `probes/` |
+| The manifest that records the names in your design | `manifest.env` |
+| Two probe statements for your database tests | `probes/` |
 
-Create `migrations/` and `design/` yourself. The harness checks that the
-diagram and the justifications exist, because a design with no written
-rationale cannot be reviewed.
+Create `migrations/` and `design/` yourself. The diagram and its justifications
+must exist, because a design with no written rationale cannot be reviewed.
 
 ## Migrations and the apply command
 
@@ -159,9 +158,9 @@ deliverable. It has to:
 
 A shell script around `psql`, a Python script, a Makefile target: any of them
 is acceptable. Declare whichever you wrote in `manifest.env` as
-`APPLY_COMMAND`, as a path or command line relative to this folder. The harness
-runs exactly that command, from this folder, with nothing set for it beyond
-`TARGET_DATABASE`. A command that works only after you have exported three
+`APPLY_COMMAND`, as a path or command line relative to this folder. It must run
+from this folder with nothing set beyond `TARGET_DATABASE`. A command that
+works only after you have exported three
 variables by hand fails there and will fail for your teammates too.
 
 Two things reliably go wrong. `psql` without `-v ON_ERROR_STOP=1` reports an
@@ -294,14 +293,11 @@ concurrently. Read `contracts/trade-api.yaml` while you design. It is the
 contract the Sprint 6 service satisfies out of this database, and a schema that
 cannot serve it is the wrong schema. Reading it is research, not shortcutting.
 
-## The check harness
+## Acceptance review
 
-`scripts/check.sh` asserts the things a machine can assert. Run it as often as
-you like.
-
-```bash
-sprint-03-trade-database/scripts/check.sh
-```
+Your team must provide repeatable tests for the machine-checkable criteria.
+The review uses your migration command against a fresh database and examines
+the resulting schema, probes, seed load and design notes.
 
 It creates an empty scratch database inside the Postgres container, named
 `trading_check` by default, runs your apply command against it, runs its
@@ -333,32 +329,31 @@ What it asserts:
 | `design/` holds an ER diagram and an index justification file | Criteria 4 and 7, the reviewable half |
 | `DESIGN.md` exists and is not empty | Criterion 6 |
 
-### How the harness avoids dictating your design
+### Recording your design
 
-The harness cannot check a schema it has not seen without either guessing your
-names or dictating them. So it asks. `manifest.env` in this folder is where you
-declare the handful of names it needs: your apply command, the accounts table,
+`manifest.env` is where you declare the handful of names needed to review your
+work: your apply command, the accounts table,
 its state column and the three literal values it stores, the orders table and
 the column carrying the idempotency key. Fill it in once your first migration
-exists. The harness reads it and adapts. It never asserts a name it was not
-given, and it has no opinion about the rest of your schema.
+exists. The manifest records your choices and has no opinion about the rest of
+your schema.
 
 Two assertions cannot be made from names alone, because only you know the
 columns your tables require. Write them yourself, as SQL, in `probes/`:
 
 - `probes/duplicate-idempotency-key.sql` inserts one valid order twice with the
-  same idempotency key. The harness expects the second insert to fail with
+  same idempotency key. Your test must show the second insert fails with
   SQLSTATE `23505`, unique violation.
 - `probes/orphan-foreign-key.sql` inserts one row that references a parent that
-  does not exist. The harness expects SQLSTATE `23503`, foreign key violation.
+  does not exist. Your test must show SQLSTATE `23503`, foreign key violation.
 
 Both run inside a transaction that is rolled back, so they leave nothing
 behind, and both run after the seed data has loaded, so they can reference
 loaded rows. Each file explains what to write in its own comments.
 
-### What passing does not mean
+### Limits of automated tests
 
-Passing the harness is necessary and it is not sufficient. It cannot tell you
+Passing your tests is necessary and it is not sufficient. They cannot tell you
 whether your schema is in third normal form, whether an index is justified or
 merely present, whether your historical design is the right one, or whether
 your team can explain any of it. Those are assessed by your instructor in the

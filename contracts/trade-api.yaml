@@ -373,8 +373,7 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        A JWT issued by the auth service, or by the provided Node auth stub in Sprints 6 and 7. The
-        claims contract is defined in `auth-api.yaml` and is identical for both.
+        A JWT issued by the auth service. The claims contract is defined in `auth-api.yaml`.
 
   parameters:
     AccountIdPath:

@@ -3,7 +3,7 @@
 The catalogue this programme draws from holds six extensions. Four of them are mandatory here
 and have a brief each in this folder. The other two are described below.
 
-Neither is available until all four mandatory services pass the harness. That is not a rule
+Neither is available until all four mandatory services pass their tests and review. That is not a rule
 about ambition, it is arithmetic: a team that starts a fifth service on Thursday with the
 notification chain half-built finishes the week with five things nobody can demonstrate, and
 the criteria are all about the four. If you reach Thursday with the chain working end to end,

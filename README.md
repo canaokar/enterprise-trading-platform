@@ -22,7 +22,7 @@ that has to answer both "what is this account's cash balance right now" and
 | Domain engine | The trading rules in Java 21, unit tested, with no database and no HTTP anywhere near them |
 | Trade REST API | A layered, Dockerised Spring Boot service implementing `contracts/trade-api.yaml`, persisting through MyBatis, verifying a JWT on every route |
 | Event backbone | Kafka topics, the Trade Executor that fills orders against live quotes, and the poller that turns a request-response pricing API into a stream |
-| Auth service | A NestJS service issuing and validating JWTs, with hashed credentials and refresh tokens, replacing the stub you were given |
+| Auth service | A NestJS service issuing and validating JWTs, with hashed credentials and refresh tokens |
 | Trading UI | An Angular application: login, dashboard, order ticket and blotter, with a typed client generated from the contracts and Playwright tests |
 | Extensions | Four integrated microservices: Portfolio and P&L, Customer Preferences, Customer Notifications, and Watchlists and Price Alerts |
 
@@ -69,46 +69,28 @@ week is supplied separately.
 ## How this repository is organised
 
 ```
-contracts/          Binding interface definitions. Read contracts/README.md.
-infra/              Shared local infrastructure. Read infra/README.md.
-services/auth-stub/ Provided JWT issuer, used from Sprint 6.
-docker-compose.yml  The shared stack. You add your own services to it.
-.env.example        Environment template. Copy to .env, never commit .env.
+contracts/    Binding interface definitions. Read contracts/README.md.
+infra/        Requirements for the local infrastructure. Read infra/README.md.
+.env.example  Environment template. Copy to .env, never commit .env.
 ```
 
 One folder per sprint arrives at the start of that sprint, named as in the
 table above. Each carries its own README with the reasoning for the component,
 the deliverable, the acceptance criteria and the tests. Work for that sprint
-goes in that folder unless the README says otherwise, and code that other
-sprints consume, meaning your services, goes in `services/` where the compose
-file can reach it.
+goes in that folder unless the README says otherwise. Create the service and
+infrastructure layout your team needs, and document the decisions you make.
 
-The platform is one repository and one stack. By Sprint 10 the compose file
-describes seven or eight services, all of which your team added and all of
-which your team can explain.
+The platform is one repository and one stack. By Sprint 10 your local
+orchestration describes seven or eight services, all of which your team added
+and all of which your team can explain.
 
-## Starting the shared infrastructure
+## Local infrastructure
 
-```bash
-cp .env.example .env
-docker compose up -d
-docker compose ps
-```
-
-That gives you Postgres on 5432, a Kafka broker on 9092, the topics from
-`contracts/kafka-topics.md`, and the auth stub on 3001. Postgres starts empty:
-no schema and no seed data ship with this branch, because designing the schema
-is the Sprint 3 deliverable.
-
-Start a subset when that is all you need. Sprints 3 to 5 need only the
-database:
-
-```bash
-docker compose up -d postgres
-```
-
-`infra/README.md` covers connection strings, resetting data, loading your own
-schema, and the failures worth checking before asking for help.
+This branch supplies infrastructure requirements, not an executable local
+stack. Your team creates the local Postgres and Kafka setup described in
+`infra/README.md`, including topic creation and service orchestration.
+Postgres starts empty: no schema or migrations ship with this branch, because
+designing them is the Sprint 3 deliverable.
 
 ## Market data: the Fauxnance API
 

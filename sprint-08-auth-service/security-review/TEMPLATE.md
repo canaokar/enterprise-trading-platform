@@ -5,7 +5,7 @@ Copy this file to one of your own in this folder, name it in
 written the night before the demonstration is a reading of this template rather
 than a reading of your service, and it reads that way.
 
-Fill in the header, then every row of the table. The harness checks that every
+Fill in the header, then every row of the table. The review checks that every
 category carries a finding and a disposition. Your instructor checks whether
 they are true.
 
@@ -30,7 +30,7 @@ what you checked and how you know. "None. Every statement in
 `users.repository.ts` and `refresh-token.repository.ts` binds its parameters,
 and no statement is assembled by string concatenation" is a finding of none.
 The word on its own is indistinguishable from a category nobody looked at, and
-the harness rejects it.
+the review rejects it.
 
 **Disposition.** What you did about it, in the past tense, or what you decided
 not to do and why. Four dispositions are useful: fixed, with the commit;

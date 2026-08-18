@@ -17,7 +17,7 @@ values that identify the same customer, and deciding what that means in your
 model is the first decision you will argue about.
 
 Add rows if you want more to work with. Do not remove any, and do not rename a
-symbol: later sprints and the check harness both expect what is here.
+symbol: later sprints and the acceptance review both expect what is here.
 
 ## `instrument-reference.csv`
 
