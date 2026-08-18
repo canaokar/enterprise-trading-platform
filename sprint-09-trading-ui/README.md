@@ -263,30 +263,16 @@ reach the browser through a service of yours that holds the key server-side.
 ## Acceptance review
 
 Your team must provide repeatable tests for the machine-checkable criteria.
-The review uses the paths recorded in `manifest.env`.
+Record the review paths in `manifest.env`.
 
-**Static mode** is the default: no browser, no running stack. It installs from the lock file
-and builds the production bundle, confirms both generated clients are on disk with the
-generator's own metadata and no file the generator did not write, regenerates them into a
-temporary directory and diffs, confirms something outside the generated tree imports them, runs
-your unit suite and reads the names of the tests that ran for each half of the interceptor
-rule, checks every code in the contracts against your mapping, and greps the built files for a
-key, a secret and the market-data address.
+Evidence must include a clean install and production build, reproducible client generation,
+the unit suite, complete error-code mapping, and a scan showing that the bundle contains no key,
+signing secret or Fauxnance address. Run each Playwright journey independently against the full
+stack. Demonstrate the guarded-route redirect and show that the bearer token reaches platform
+APIs but no third-party origin. Account for the login throttle in your test setup rather than
+weakening it.
 
-The live review needs your whole stack up and starts nothing itself.
-It confirms the three services answer, runs each journey on its own in its own process, then
-drives your sign-in form twice: once from a clean context straight at a guarded route to watch
-the redirect, and once signed in with every request recorded, to read where the bearer token
-went and where it did not. That probe is written into `E2E_DIR` and deleted when the review
-exits. Do not commit it.
-
-Live mode signs in several times over. If your Auth service throttles the login route, as
-Sprint 8 asked it to, the later attempts come back refused and read here as broken journeys.
-Set `LOGIN_THROTTLE_COOLDOWN_SECONDS` so the review can wait out your window before each
-sign-in. Do not weaken the throttle to make a test pass.
-
-Every skip is named and explained. A skip is honest; a green run against something that was not
-there is not. Passing is necessary and not sufficient: whether your messages are readable by a
+Passing is necessary and not sufficient: whether your messages are readable by a
 trader, whether the interceptor decides by origin rather than by a list of hosts somebody
 remembered, whether the blotter tells a working order apart from a stalled one, and whether a
 value could reach the browser by a route no grep can see are read at the review.

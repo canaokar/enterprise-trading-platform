@@ -275,7 +275,7 @@ These are the criteria your instructor assesses against.
 Your team must provide repeatable tests for the machine-checkable criteria.
 They need no database, container or Fauxnance call.
 
-| Check | What it proves |
+| Evidence | What it proves |
 |---|---|
 | A `pom.xml` is present and `mvn clean test-compile` succeeds from a clean state | The engineering contract, and that the module compiles from the repository rather than from something cached on one laptop |
 | The whole suite passes | The floor for criterion 7 |
@@ -286,19 +286,15 @@ They need no database, container or Fauxnance call.
 | Six exception types exist, all descending from one domain base | Criterion 3 |
 | `mvn dependency:tree` carries no Spring, servlet, JDBC, MyBatis or connection-pool artefact | Criterion 5 |
 
-It reads your base package and your six exception class names from
-`manifest.env`, so it asserts your design rather than dictating one; the
-enumeration names and the three test class names come from the criteria and are
-not yours to choose. Those two checks read compiled classes with `javap` rather
-than your source, so a literal commented out, declared in a string or spelled
-differently in two places is caught rather than matched, and a failure names the
-literal that is missing and the one it found instead.
+Record your base package and six exception class names in `manifest.env`. The
+enumeration names and three test class names come from the criteria and are not
+yours to choose.
 
 ### Limits of automated tests
 
-The review counts tests, it does not read them: a test that asserts nothing
-passes here. It confirms that eight rules could be implemented, and it has never
-placed an order. Assessed by a human at the design review and not by this script:
+Counting tests does not assess their quality: a test that asserts nothing
+passes. A count confirms that eight rules could be implemented, but does not
+placed an order. The design review assesses:
 
 - whether each of the eight rules is correct, in the right order, and in the
   domain rather than in a caller

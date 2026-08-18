@@ -441,7 +441,7 @@ These are the criteria your instructor assesses against.
 Your team must provide repeatable tests for the machine-checkable criteria.
 Unit tests must run without a container, broker, database or Fauxnance call.
 
-| Check | What it proves |
+| Evidence | What it proves |
 |---|---|
 | `mvn clean verify` succeeds in `executor/`, and it has tests | Criterion 3, the half a build can see |
 | The poller and the pipeline install into an empty environment | They are packages a teammate can install, not folders that work on one laptop |
@@ -451,13 +451,11 @@ Unit tests must run without a container, broker, database or Fauxnance call.
 | The first test commit precedes the first change to your Sprint 6 sources | Criterion 8, the half that is the whole point |
 | No Fauxnance key literal anywhere in this folder | The key is not in the repository |
 
-The live review needs the whole stack: the broker with the topics, your schema
-and seed data, your Trade REST API, your executor and your poller. It places one
-order, produces one message back onto `orders`, and inserts one row into your
-`orders` table and removes it again. Both statements are in `manifest.env` and
-both are yours to correct if your schema spells anything differently.
+Integration evidence comes from the broker with its topics, your schema and
+seed data, the Trade REST API, the executor and the poller. Record the commands
+needed to exercise your design in `manifest.env`.
 
-| Probe | What it proves |
+| Integration evidence | What it proves |
 |---|---|
 | The three topics exist with the documented partition counts | Criterion 1 |
 | An order placed through your API answers `NEW`, and appears on `orders` keyed by the account | Criterion 2 |
@@ -468,11 +466,9 @@ both are yours to correct if your schema spells anything differently.
 | `FACT_TRADES` grows after a load, and does not grow after a second load with no new data | Criterion 6, and idempotency |
 | A deliberately bad row lands in the dead-letter path and not in the fact table | Criterion 6 |
 
-The review uses your names, topics, consumer group and three pipeline commands
-from `manifest.env`. The batch size is the one criterion no static check can
-reach without dictating how you write the poller, so live mode reports how many
-distinct symbols arrived in one cycle instead, and the cap at 25 is read at the
-review.
+The batch size cannot be established from structure without dictating how you
+write the poller. Demonstrate how many distinct symbols arrive in one cycle and
+show that each request stays within the cap of 25.
 
 Passing is necessary and not sufficient. Automated checks confirm that the same
 message twice moved no money in one run, without knowing whether the mechanism

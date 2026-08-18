@@ -244,12 +244,7 @@ Your team must provide repeatable tests for the machine-checkable criteria.
 They must need no database or container and must not call Fauxnance, so they
 cost nothing against your quota.
 
-It builds a scratch virtual environment at `.check-venv/`, installs this folder
-into it, and runs your suite there. Pass `--reuse` to keep the environment
-between runs once you are iterating, and `--keep` to leave it in place after a
-run that passed so you can run pytest in it yourself.
-
-| Check | What it proves |
+| Evidence | What it proves |
 |---|---|
 | This folder installs as a package into an empty environment, and the `dev` extra brings pytest | The engineering contract, and that a teammate can install it |
 | The package named in `manifest.env` imports from that environment | It is a package rather than a folder that works on one laptop |
@@ -273,7 +268,7 @@ naming convention on the rest of your suite.
 
 ### Limits of automated tests
 
-The review runs your malformed-input test, it does not read it. A test that
+Running your malformed-input test does not assess its quality. A test that
 asserts nothing passes here. It measures the length of a claim, not its truth.
 It confirms a chart file exists, and it has never opened one. It cannot see
 which symbols you pulled.

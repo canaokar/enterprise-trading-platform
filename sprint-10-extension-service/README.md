@@ -288,23 +288,14 @@ services pass their tests and review.
 ## Acceptance review
 
 Your team must provide repeatable tests for the machine-checkable criteria.
-The review uses the names and values in `manifest.env`.
+Record the review names and values in `manifest.env`.
 
-**Static mode** is the default: no running service. It reads the manifest, confirms the four
-briefs are where it expects them and that you have declared four services on four different
-ports, counts the decision log entries that are not the template, and reads your combined
-review: that it exists, that it is not the template, that every category carries a finding and
-a disposition, and that all four services are named somewhere in it.
+Evidence must cover four services on separate ports, the decision log and the
+combined security review. Against the full stack, demonstrate each health
+route, rejection of missing and wrongly signed tokens, and acceptance of a
+valid token. Then demonstrate the integrated chain:
 
-**Live mode** needs the whole stack up and starts nothing itself. It signs in once, the way the
-Angular application signs in, then puts the same four probes to each of the four services: the
-health route answers, the protected route refuses a request with no token, refuses a
-well-formed token signed with a key nobody holds, and answers a real one. One token, four
-services, each verifying it on its own.
-
-Then it follows the chain as far as it can be followed from outside.
-
-| Probe | What it does |
+| Integration evidence | What it shows |
 |---|---|
 | Preferences round trip | Writes a channel through your API and reads it back on the route notifications calls |
 | Trade event to notification | Runs the command you declared to publish one `trade-events` message, waits, and checks that a notification record appeared |
@@ -312,18 +303,11 @@ Then it follows the chain as far as it can be followed from outside.
 | Alert to notification | Counts notification records either side of that quote, because an alert delivered through a log leaves none |
 | Portfolio contract | Reads the summary and positions routes and checks the response shapes against `contracts/portfolio-api.yaml` |
 
-Creating that alert is the only write live mode makes. Everything else it does is a read, so a
-run leaves nothing behind but one alert on the demo account.
-
 The two publish commands are yours to declare, because reviewers will not
 guess at your topic configuration, your container names or your envelope. A console
 producer, a small script in your repository, or a real order placed through the Trade REST API
-all work, and the last is the one closest to the demonstration. Leave a command empty and the
-probe it drives becomes a named skip rather than a failure, which is what a Tuesday run should
-look like.
-
-Every skip is named and explained. A skip is honest. A green run against something that was not
-there is not.
+all work, and the last is the one closest to the demonstration. Leave a command empty when the
+related evidence cannot be demonstrated.
 
 ## Acceptance criteria
 

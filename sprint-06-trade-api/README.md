@@ -245,7 +245,7 @@ Your team must provide repeatable tests for the machine-checkable criteria.
 Unit and slice tests must run without a container, database, running service or
 Fauxnance call.
 
-| Check | What it proves |
+| Evidence | What it proves |
 |---|---|
 | `mvn clean verify` succeeds from a clean state | The engineering contract, and that the tests pass from the repository |
 | Your Sprint 5 artefact resolves from your local Maven repository | Criterion 2, the dependency half |
@@ -257,9 +257,9 @@ Fauxnance call.
 | `Dockerfile` has more than one stage, and its final stage is not a build image | Criterion 8 |
 | The account version column appears in a mapper that updates | Criterion 6, the static half |
 
-The live review uses your running stack with your schema and seed data applied.
+Integration evidence uses your running stack with your schema and seed data applied.
 
-| Probe | What it proves |
+| Integration evidence | What it proves |
 |---|---|
 | A valid test token is accepted | Criterion 7, the positive half |
 | A missing token and a tampered token on a protected route | Criterion 7: both `AUTH-401`, both in the envelope |
@@ -267,17 +267,15 @@ The live review uses your running stack with your schema and seed data applied.
 | An unknown account, an unknown instrument, an inactive account, an unaffordable buy, a reused idempotency key and an invalid field | Criterion 1, the catalogue half |
 | Several concurrent orders against one account, reconciled against the cash | Criterion 6, behaviourally: a lost update shows up as cash that did not move |
 
-The review uses the names in `manifest.env`. It assumes nothing about your
-schema: it goes through your API and needs only the demo user whose token reaches an
-active account, the one whose account you seeded inactive, and a symbol you
-seeded as tradable.
+Record the review values in `manifest.env`, including an active account, an
+inactive account and a tradable symbol.
 
 ### Limits of automated tests
 
 Automated checks read structure, not meaning. They confirm that a mapper binds its
 parameters without knowing whether the statement is right, and that an
 annotation is present without knowing whether the boundary is where it should
-be. Assessed by a human at the review, and not by this script:
+be. The review assesses:
 
 - whether the transaction encloses the work that has to be atomic, and no more
 - whether every domain exception leaves as its documented code, rather than most

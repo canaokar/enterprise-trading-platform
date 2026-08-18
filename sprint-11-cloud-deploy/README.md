@@ -249,32 +249,21 @@ repository, and `deploy/deploy-ui.sh` is the one the runbook uses. Name its path
 
 Your team must provide repeatable checks for the machine-checkable criteria.
 
-Static mode reads `manifest.env`, checks the shape of your declared bucket name and distribution
-domain, confirms your deployment entry point exists at the path you declared and covers the
-build, upload and invalidate stages, and searches the repository and this folder's history for
-anything shaped like an AWS access key.
-
-Live mode needs the deployment to exist and needs network access. It fetches your distribution
-domain over HTTPS and confirms the answer is your Angular application rather than an error page,
-probes both of your bucket's own endpoints and confirms they refuse, then fetches the JavaScript
-the deployed page references and runs the Sprint 9 secret patterns over it. It holds no AWS
-credentials and asks for none: everything it checks, it checks from outside, the way a customer
-would.
-
-Two things about it are worth saying plainly.
+Evidence must show that the deployment entry point covers build, upload and
+invalidation, the repository history contains no AWS access key, the
+distribution serves the Angular application over HTTPS, both bucket endpoints
+refuse direct access, and the deployed JavaScript passes the Sprint 9 secret
+scan.
 
 Most of what this week is assessed on happens in an AWS account that automated
 checks have no credentials for. They cannot see your origin access control, they
-cannot see your IAM policy, it cannot see whether a human approved a deploy, and it cannot sign
+cannot see your IAM policy, they cannot see whether a human approved a deploy, and they cannot sign
 in.
 
-It depends on the network, so it can fail for reasons that have nothing to do with you. A
+Network checks can fail for reasons that have nothing to do with you. A
 distribution that has just been created answers oddly until it reaches `Deployed`. An
-invalidation in flight can serve you the previous build. A failure in live mode is worth a
+invalidation in flight can serve you the previous build. A failure is worth a
 second run before it is worth an hour of debugging.
-
-Every skip names itself and says what would make it run. A skip is honest. A green run against
-something that was not there is not.
 
 ## Acceptance criteria
 

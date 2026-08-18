@@ -234,10 +234,8 @@ check refuses first and which therefore passes against a guard with no expiry
 check at all. Build the wrong-signature case by signing a genuine, unexpired
 token with a different key.
 
-The review runs your suite, reads the names of the tests that ran, and looks
-for those two cases among the specs whose path matches `GUARD_SPEC_PATTERN`.
-Name your tests as you like and correct the patterns if the defaults do not
-reach them. Beyond the guard, expect to be asked at the review for tests
+Name your tests as you like and record the guard spec pattern in
+`manifest.env`. Beyond the guard, expect to be asked at the review for tests
 covering the identical failure for an unknown user and a wrong password, and the
 reissue on refresh.
 
@@ -248,8 +246,8 @@ decorators on your controller and your DTOs. A YAML file maintained by hand
 beside the code drifts within a fortnight, and the document that matters
 describes what is deployed. Two paths are declared in `manifest.env`: the human
 page, `/docs` by default, and the JSON document, `/docs/json` by default. The
-review fetches the JSON and confirms that it is an OpenAPI document describing
-the four routes. It does not replace `contracts/auth-api.yaml`. It is the
+generated document must describe the four routes. It does not replace
+`contracts/auth-api.yaml`. It is the
 evidence that your code still matches it.
 
 ## The security review
@@ -295,7 +293,7 @@ These are the criteria your instructor assesses against.
 Your team must provide repeatable tests for the machine-checkable criteria.
 Unit tests must run without a container, database or running service.
 
-| Check | What it proves |
+| Evidence | What it proves |
 |---|---|
 | `npm ci` installs from the lock file | A teammate gets the tree you tested, rather than whatever resolves the day they clone it |
 | `npm run build` succeeds from a clean state | The service compiles from the files in the repository |
@@ -304,10 +302,10 @@ Unit tests must run without a container, database or running service.
 | No log call in your sources names a credential field | Criterion 4, the never-logged half, in its direct form |
 | The security review exists, differs from the template, and every category carries a finding and a disposition | Criterion 9 |
 
-The live review needs your service running against its store and your Sprint 6
-service pointed at it.
+Integration evidence needs your service running against its store and your
+Sprint 6 service pointed at it.
 
-| Probe | What it proves |
+| Integration evidence | What it proves |
 |---|---|
 | Register, login, refresh and `/auth/me` against the contract | Criterion 1 |
 | A decoded access token, claim by claim | Criterion 2 |
@@ -317,17 +315,13 @@ service pointed at it.
 | A protected Trade REST API route with a token from this service, and with a token signed by a key it should not trust | Criterion 3, behaviourally |
 | The OpenAPI document, fetched from the running service | Criterion 8 |
 
-Criterion 5 is the one probe that reads a declaration rather than fixing the
-behaviour. Set `ROTATION_REVOCATION=enforced` and the reviewer presents the
-exchanged refresh token again and requires `AUTH-401`. Set it to `documented`
-and that probe is replaced by a check that your security review carries the
-decision in writing, with the review recording what it would have probed on the
-stricter setting. Both settings assert that a refresh returns a new refresh
-token and that the new one works.
+For criterion 5, set `ROTATION_REVOCATION=enforced` when the exchanged refresh
+token is rejected with `AUTH-401`. Set it to `documented` when the security
+review records the decision and risk. Both settings require a refresh to return
+a new refresh token that works.
 
-Criterion 3 is read with `git diff` at the design review. No script can tell a
-configuration change from a code change that looks like one. The remaining
-review values come from `manifest.env`.
+For criterion 3, bring a `git diff` showing configuration changes only. Record
+the remaining review values in `manifest.env`.
 
 Passing is necessary and not sufficient. Automated checks read structure and
 behaviour at the edges, and cannot see whether a password reaches a log by an

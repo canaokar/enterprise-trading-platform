@@ -296,23 +296,8 @@ cannot serve it is the wrong schema. Reading it is research, not shortcutting.
 ## Acceptance review
 
 Your team must provide repeatable tests for the machine-checkable criteria.
-The review uses your migration command against a fresh database and examines
-the resulting schema, probes, seed load and design notes.
-
-It creates an empty scratch database inside the Postgres container, named
-`trading_check` by default, runs your apply command against it, runs its
-assertions, and drops the scratch database when they all pass. Your working
-`trading` database is never touched. When a check fails the scratch database is
-left in place so you can look at it:
-
-```bash
-docker compose exec postgres psql -U postgres -d trading_check
-```
-
-Set `CHECK_DATABASE` in the environment to use a different name, and pass
-`--keep` to hold the scratch database open after a run that passed.
-
-What it asserts:
+Run your migration command against a fresh database and retain the results of
+your schema, probe and seed tests. The review evidence must cover:
 
 | Check | What it proves |
 |---|---|
@@ -347,9 +332,8 @@ columns your tables require. Write them yourself, as SQL, in `probes/`:
 - `probes/orphan-foreign-key.sql` inserts one row that references a parent that
   does not exist. Your test must show SQLSTATE `23503`, foreign key violation.
 
-Both run inside a transaction that is rolled back, so they leave nothing
-behind, and both run after the seed data has loaded, so they can reference
-loaded rows. Each file explains what to write in its own comments.
+Run both inside a transaction that is rolled back, after the seed data has
+loaded. Each file explains what to write in its own comments.
 
 ### Limits of automated tests
 
