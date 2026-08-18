@@ -288,6 +288,21 @@ These are the criteria your instructor assesses against.
 9. The security review against the auth-related OWASP items is committed, with a
    finding and a disposition for every category.
 
+## Evaluation
+
+This sprint contributes 13 marks to the 100-mark Capstone assessment. The API
+contract, security-review template and manifest are inputs. Marks are awarded
+for the service, security decisions and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| NestJS design and contract-compliant endpoints | 2 |
+| Registration, login, refresh and token lifecycle | 3 |
+| Password hashing, JWT claims and uniform authentication failures | 2 |
+| Guards, account authorisation and Trade REST API integration | 3 |
+| Jest coverage, served OpenAPI document and completed OWASP review | 3 |
+| **Sprint total** | **13** |
+
 ## Acceptance review
 
 Your team must provide repeatable tests for the machine-checkable criteria.

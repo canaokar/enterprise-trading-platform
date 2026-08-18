@@ -291,3 +291,18 @@ These are the criteria your instructor assesses against.
 7. The blotter shows status badges and handles an order sitting at `NEW`.
 8. Playwright covers signing in and placing an order, each journey standing on its own.
 9. No API key and no secret is present in the built bundle.
+
+## Evaluation
+
+This sprint contributes 13 marks to the 100-mark Capstone assessment. The API
+contracts and manifest are inputs. Marks are awarded for the workspace,
+application and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| Required screens, reactive validation and asynchronous order states | 3 |
+| Sign-in, token handling, interceptor and route guards | 3 |
+| Generated clients and working account and order integration | 3 |
+| Clear loading, success and error states, with basic accessibility | 1 |
+| Unit tests, independent Playwright journeys and bundle secret scan | 3 |
+| **Sprint total** | **13** |

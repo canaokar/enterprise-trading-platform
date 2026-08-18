@@ -326,6 +326,22 @@ These are the criteria your instructor assesses against.
 7. One combined OWASP security review covers all four, and its findings are addressed.
 8. An architecture decision log is committed, giving the reasoning for each significant choice.
 
+## Evaluation
+
+This sprint contributes 8 marks to the 100-mark Capstone assessment. The six
+catalogue extensions and document templates are inputs. All six extensions are
+eligible evidence under the same rubric, and the maximum remains 8 marks
+regardless of how many the team delivers.
+
+| Criterion | Marks |
+|---|---:|
+| Agreed scope, backlog and architecture decisions | 1 |
+| Functional depth of the delivered extensions | 2 |
+| End-to-end API, event, data and authentication integration | 2 |
+| Combined OWASP review and treatment of its findings | 1 |
+| Tests, quality evidence and team explanation | 2 |
+| **Sprint total** | **8** |
+
 ## Integration quality is read by a person
 
 Automated checks are not a finished sprint. They show that some files exist

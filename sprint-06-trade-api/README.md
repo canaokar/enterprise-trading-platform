@@ -239,6 +239,22 @@ These are the criteria your instructor assesses against.
 7. A protected route rejects a missing or invalid token with `AUTH-401`.
 8. The service builds and runs from a multi-stage Dockerfile.
 
+## Evaluation
+
+This sprint contributes 18 marks to the 100-mark Capstone assessment. The API
+contract and manifest are inputs. Marks are awarded for the service design,
+implementation and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| Contract-compliant endpoints, responses and error catalogue | 4 |
+| Controller, service, domain and mapper boundaries | 3 |
+| MyBatis persistence, transactions and concurrency control | 4 |
+| Validation, authentication, authorisation and structured logging | 3 |
+| Reproducible multi-stage container build | 1 |
+| Unit, slice, integration and contract evidence | 3 |
+| **Sprint total** | **18** |
+
 ## Acceptance review
 
 Your team must provide repeatable tests for the machine-checkable criteria.

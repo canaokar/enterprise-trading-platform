@@ -436,6 +436,21 @@ These are the criteria your instructor assesses against.
 8. Characterisation tests written around your Sprint 6 service before it is
    changed.
 
+## Evaluation
+
+This sprint contributes 10 marks to the 100-mark Capstone assessment. The
+topic and analytics contracts, manifest and fixtures are inputs. Marks are
+awarded for the services, integration and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| Topic creation, keys, partitions and event contracts | 2 |
+| Trade REST API producer and Trade Executor integration | 2 |
+| Incremental, idempotent analytics load with bad-row handling | 2 |
+| Duplicate handling, retries, dead-letter paths and transaction boundaries | 2 |
+| Tests, characterisation history, SonarQube gate and live event flow | 2 |
+| **Sprint total** | **10** |
+
 ## Acceptance review
 
 Your team must provide repeatable tests for the machine-checkable criteria.

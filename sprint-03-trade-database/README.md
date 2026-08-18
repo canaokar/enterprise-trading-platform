@@ -293,6 +293,21 @@ concurrently. Read `contracts/trade-api.yaml` while you design. It is the
 contract the Sprint 6 service satisfies out of this database, and a schema that
 cannot serve it is the wrong schema. Reading it is research, not shortcutting.
 
+## Evaluation
+
+This sprint contributes 7 marks to the 100-mark Capstone assessment. The
+domain brief, contracts, seed data, manifest and probe templates are inputs.
+Marks are awarded for the database design, implementation and evidence the
+team produces.
+
+| Criterion | Marks |
+|---|---:|
+| ER model, entity relationships and normalisation decisions | 2 |
+| DDL, keys, foreign keys, checks and required core tables | 2 |
+| Index justifications and historical trade data design | 1 |
+| Repeatable migrations, complete seed loading and review evidence | 2 |
+| **Sprint total** | **7** |
+
 ## Acceptance review
 
 Your team must provide repeatable tests for the machine-checkable criteria.

@@ -276,6 +276,20 @@ second run before it is worth an hour of debugging.
 6. The IAM user or role is scoped to the bucket and the distribution only, and no long-lived key
    is in the repository.
 
+## Evaluation
+
+This week contributes 5 marks to the 100-mark Capstone assessment. The runbook,
+policy skeleton and manifest are inputs. Marks are awarded for the deployment,
+automation and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| Private S3 origin delivered through CloudFront with origin access control | 2 |
+| Working authenticated journey from the deployed front end | 1 |
+| Repeatable deployment and invalidation entry point | 1 |
+| Scoped IAM, secret handling and recorded deployment decisions | 1 |
+| **Sprint total** | **5** |
+
 ## What a person assesses
 
 Automated checks are not the assessment. They can tell you that a URL answered,
