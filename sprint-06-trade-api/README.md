@@ -366,6 +366,24 @@ These are the criteria your instructor assesses against.
 7. A protected route rejects a missing or invalid token with `AUTH-401`.
 8. The service builds and runs from a multi-stage Dockerfile.
 
+## Evaluation
+
+This sprint contributes 18 marks to the 100-mark Capstone assessment. The
+package tree, the `application.yml` skeleton and `Dockerfile.example` carry no
+marks unchanged, and a service that builds but does nothing earns none either.
+Your instructor reads the code and exercises the running service against the
+criteria above.
+
+| Criterion | Marks |
+|---|---:|
+| Six endpoints, response bodies, error envelope and catalogue compliance | 4 |
+| Controller, service and mapper separation with central exception mapping | 3 |
+| Parameterised MyBatis persistence, transactions and concurrency control | 4 |
+| JWT verification, account authorisation and safe failure responses | 3 |
+| Unit, slice and live contract evidence | 3 |
+| Multi-stage container build and Compose integration | 1 |
+| **Total** | **18** |
+
 ## The review
 
 Your instructor assesses this sprint by reading the code against the criteria

@@ -272,6 +272,21 @@ contract the Sprint 6 service satisfies out of this database, and a schema
 that cannot serve it is the wrong schema. Reading it is research, not
 shortcutting.
 
+## Evaluation
+
+This sprint contributes 7 marks to the 100-mark Capstone assessment. The empty
+`migrations/` and `seed/` folders, their READMEs and the Compose infrastructure
+carry no marks. Your instructor reads the schema you design, the SQL you write
+and the evidence you can explain against the criteria above.
+
+| Criterion | Marks |
+|---|---:|
+| ER model, relationship choices and third-normal-form justification | 2 |
+| DDL, keys, foreign keys, checks and domain enforcement | 2 |
+| Index choices and historical trade structures | 1 |
+| Repeatable migrations, representative seed data and the design walkthrough | 2 |
+| **Total** | **7** |
+
 ## The design review
 
 Satisfying every countable criterion above is necessary and it is not

@@ -591,6 +591,23 @@ These are the criteria your instructor assesses against.
 7. SonarQube gate passing on the pipeline and the executor.
 8. Characterisation tests written before any refactoring of the starter code.
 
+## Evaluation
+
+This sprint contributes 10 marks to the 100-mark Capstone assessment. The
+executor scaffold, the empty `scripts/create-topics.sh` and the supplied
+`etl-starter/` carry no marks unchanged. Your instructor reads the
+implementation, the correction of the starter, the integration and the evidence
+you add against the criteria above.
+
+| Criterion | Marks |
+|---|---:|
+| Topic configuration and the Trade REST API publishing change | 2 |
+| Trade Executor pricing, settlement transaction and event publication | 2 |
+| Duplicate safety, retries and dead-letter handling | 2 |
+| Quota-aware market-data polling and the incremental analytical load | 2 |
+| Characterisation history, tests, SonarQube gate and live demonstration | 2 |
+| **Total** | **10** |
+
 ## The review
 
 Your instructor assesses this sprint by reading the code against the criteria

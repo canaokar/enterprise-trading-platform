@@ -313,6 +313,23 @@ These are the criteria your instructor assesses against.
    significant choice.
 9. The team can demonstrate the feature working against live data, not fixtures.
 
+## Evaluation
+
+This sprint contributes 8 marks to the 100-mark Capstone assessment. Every
+extension in the catalogue is eligible. The same rubric applies whichever
+extension is selected, and selecting more than one does not increase the
+8-mark maximum. The catalogue briefs and `decision-log/TEMPLATE.md` carry no
+marks unchanged.
+
+| Criterion | Marks |
+|---|---:|
+| Confirmed scope, backlog and architecture decisions | 1 |
+| Functional depth of the selected extension | 2 |
+| Module boundary inside the Trade REST API, JWT authorisation, Angular route and live data | 2 |
+| Security review and closure of its findings | 1 |
+| Tests, SonarQube gate and demonstrated behaviour | 2 |
+| **Total** | **8** |
+
 ## The review
 
 Every criterion this week is read or demonstrated. There is nothing countable to

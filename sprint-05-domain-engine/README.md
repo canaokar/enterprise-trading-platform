@@ -393,6 +393,23 @@ These are the criteria your instructor assesses against.
    all green.
 8. UML class and sequence diagrams are committed and match the code.
 
+## Evaluation
+
+This sprint contributes 18 marks to the 100-mark Capstone assessment. The
+Maven build, the banned-dependencies rule and the empty source tree carry no
+marks unchanged. Your instructor reads the domain design, the rule
+implementation, the test history and the walkthrough against the criteria
+above.
+
+| Criterion | Marks |
+|---|---:|
+| Entities, enumerations and the validated order request DTO | 4 |
+| Business rules 1 to 8, including evaluation order and boundary behaviour | 5 |
+| Exception hierarchy and independence from database, HTTP and Spring | 3 |
+| JUnit coverage and test-first evidence in commit history | 4 |
+| UML diagrams that match the code and support the team walkthrough | 2 |
+| **Total** | **18** |
+
 ## The review
 
 Assessed by your instructor, reading the code and the history against the

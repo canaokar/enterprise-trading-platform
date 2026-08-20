@@ -304,6 +304,21 @@ These are the criteria your instructor assesses against.
 7. The team gives a live demonstration to the panel covering the platform, the
    extension, design decisions, Copilot usage and the code-quality story.
 
+## Evaluation
+
+This sprint contributes 5 marks to the 100-mark Capstone assessment.
+`iam/policy-skeleton.json` and the showcase checklist carry no marks unchanged.
+Your instructor and the panel assess the deployed system, the repeatable
+deployment and the live showcase against the criteria above.
+
+| Criterion | Marks |
+|---|---:|
+| HTTPS delivery through CloudFront with a private S3 origin and origin access control | 2 |
+| One-command deployment, scoped IAM and no committed credentials | 1 |
+| Authenticated platform flow verified from the deployed front end | 1 |
+| Live showcase, shared team explanation and supporting evidence | 1 |
+| **Total** | **5** |
+
 ## What a person assesses
 
 Every criterion this week is read or demonstrated. Most of what the sprint is

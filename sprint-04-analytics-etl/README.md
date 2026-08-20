@@ -218,6 +218,21 @@ These are the criteria your instructor assesses against.
    case.
 5. Rate-limit and error handling are present, and not a bare `try` block.
 
+## Evaluation
+
+This sprint contributes 8 marks to the 100-mark Capstone assessment. The
+package layout, the supplied fixtures and the `claims.md` template carry no
+marks unchanged. Your instructor reads the pipeline, the analytical findings,
+the tests and the handling of real data against the criteria above.
+
+| Criterion | Marks |
+|---|---:|
+| Three defensible business claims supported by readable charts | 2 |
+| Separated extract, transform and load pipeline with a runnable entry point | 2 |
+| Fauxnance integration, caching, quota control and distinct failure handling | 2 |
+| Transform and malformed-input tests, packaging and reproducible evidence | 2 |
+| **Total** | **8** |
+
 ## The review
 
 Whether the claim holds, whether the chart supports it, whether a reader

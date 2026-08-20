@@ -367,6 +367,22 @@ These are the criteria your instructor assesses against.
 8. Playwright covers signing in, placing an order and viewing history.
 9. No API key and no secret is present in the built bundle.
 
+## Evaluation
+
+This sprint contributes 13 marks to the 100-mark Capstone assessment. The workspace, the
+generator configuration, the empty feature directories and the compiling bootstrap in
+`src/main.ts` carry no marks unchanged. Generated clients earn marks only when they are
+current, integrated and driving working journeys.
+
+| Criterion | Marks |
+|---|---:|
+| Sign-in, dashboard, order ticket and blotter behaviour | 3 |
+| Token interceptor, route guards and safe redirect handling | 3 |
+| Current generated clients and working asynchronous API integration | 3 |
+| Validation, catalogue messages, status states and basic accessibility | 1 |
+| Unit tests, three independent Playwright journeys and bundle security | 3 |
+| **Total** | **13** |
+
 ## The review
 
 Your instructor assesses this sprint by reading the code against the criteria above and by
