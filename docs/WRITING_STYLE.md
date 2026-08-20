@@ -56,7 +56,7 @@ Fixed terms used across the programme, spelled exactly this way:
 | Trade Executor | The Kafka consumer that fills orders | executor service, matching engine |
 | Fauxnance API | The provided market-data API | pricing API, live pricing service |
 | Auth service | The NestJS JWT service | identity service, auth server |
-| Extension | A Sprint 10 team-selected microservice | plugin, add-on, module |
+| Extension | A Sprint 10 team-selected capability, built as a module inside the Trade REST API | plugin, add-on, extension service |
 | Capstone | The whole platform build | project, assignment |
 | Sprint N | The taught week. Folders are named `sprint-NN-slug`, and calendar weeks appear in prose and tables only | week N as the name of a sprint, week numbers in folder names |
 

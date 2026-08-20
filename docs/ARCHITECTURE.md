@@ -1,6 +1,6 @@
 # Architecture
 
-Status: canonical. This document defines the shape of the Enterprise Trading Platform. Week briefs, starter code and contracts must agree with it. Where a source document disagrees, see `DECISIONS.md`.
+Status: canonical. This document defines the shape of the Enterprise Trading Platform. Week briefs, starter code and contracts must agree with it. Where a source document disagrees, see `DECISIONS.md`. The restructure this file now describes, and the reasoning behind each part of it, is recorded in `TARGET_ARCHITECTURE.md`. The same structure is drawn service by service in [`diagrams/index.html`](diagrams/index.html).
 
 ## Why the platform is shaped this way
 
@@ -18,15 +18,11 @@ flowchart TB
 
   subgraph SEC["Security, Sprint 8"]
     AUTH["Auth service<br/>NestJS, JWT issue and verify<br/>:3000"]
-    STUB["Node auth stub<br/>provided, Sprint 6 only<br/>:3000"]
+    STUB["Node auth stub<br/>provided, Sprints 6 and 7<br/>:3000 in the claims contract,<br/>published on :3001 locally"]
   end
 
   subgraph API["API, Sprint 6"]
-    TRADE["Trade REST API<br/>Spring Boot 3.x, MyBatis<br/>:8080"]
-  end
-
-  subgraph DOM["Domain, Sprint 5"]
-    ENGINE["Trading domain engine<br/>Java 21 library, no I/O<br/>packaged into the Trade REST API"]
+    TRADE["Trade REST API<br/>Spring Boot 3.x, MyBatis<br/>Sprint 5 domain package,<br/>Sprint 10 extension modules<br/>:8080"]
   end
 
   subgraph MSG["Messaging, Sprint 7"]
@@ -34,13 +30,7 @@ flowchart TB
   end
 
   subgraph EXEC["Execution, Sprint 7"]
-    EXECUTOR["Trade Executor<br/>Kafka consumer, fill logic<br/>health :8082"]
-    POLLER["Market-data poller<br/>Python, quote publisher<br/>health :8083"]
-  end
-
-  subgraph EXT["Extensions, Sprint 10"]
-    PORTFOLIO["Portfolio and P&L<br/>:8081"]
-    OTHERX["Watchlists, Notifications,<br/>Preferences, Advice, Strategy<br/>:8084 upwards"]
+    EXECUTOR["Trade Executor<br/>Kafka consumer, fill logic,<br/>scheduled market-data poller<br/>health :8082"]
   end
 
   subgraph DATA["Data, Sprint 3"]
@@ -49,7 +39,7 @@ flowchart TB
 
   subgraph ANA["Analytics, Sprints 4 and 7"]
     ETL["Python ETL<br/>pandas, batch extract and load"]
-    WH[("Analytical store<br/>Snowflake or DuckDB file")]
+    WH[("Analytical store<br/>DuckDB file")]
     DASH["Python dashboard"]
   end
 
@@ -58,23 +48,15 @@ flowchart TB
   end
 
   UI -->|"login, refresh"| AUTH
-  UI -.->|"Sprint 6 only"| STUB
+  UI -.->|"Sprints 6 and 7"| STUB
   UI -->|"Bearer JWT"| TRADE
-  UI -->|"Bearer JWT"| PORTFOLIO
-  TRADE -->|"verify signature"| AUTH
-  TRADE --> ENGINE
   TRADE -->|"read and write"| PG
   TRADE -->|"produce orders"| KAFKA
   KAFKA -->|"consume orders"| EXECUTOR
-  EXECUTOR -->|"GET /quotes"| FAUX
+  EXECUTOR -->|"GET /quotes, GET /quotes batch"| FAUX
   EXECUTOR -->|"write fills, positions, balance"| PG
-  EXECUTOR -->|"produce trade-events"| KAFKA
-  POLLER -->|"GET /quotes batch"| FAUX
-  POLLER -->|"produce market-data"| KAFKA
-  KAFKA -->|"consume trade-events"| PORTFOLIO
-  KAFKA -->|"consume market-data, trade-events"| OTHERX
-  PORTFOLIO -->|"read positions"| PG
-  PORTFOLIO -->|"GET /quotes batch"| FAUX
+  EXECUTOR -->|"produce trade-events, market-data"| KAFKA
+  KAFKA -->|"consume trade-events, market-data<br/>extension modules"| TRADE
   PG -->|"batch extract"| ETL
   KAFKA -.->|"streamed load, optional"| ETL
   ETL --> WH
@@ -88,19 +70,16 @@ flowchart TB
 |---|---|---|---|---|
 | Angular UI | 9 | Angular 21+, TypeScript, signals, RxJS | 4200 in development, static objects behind CloudFront in production | Login, dashboard, order ticket, blotter. Holds the JWT, attaches it through an interceptor, guards authenticated routes. Consumes typed clients generated from the contracts in `contracts/`. |
 | Auth service | 8 | NestJS 11, TypeScript, argon2 or bcrypt, Jest | 3000 | Registration, login, refresh, current user. Signs and verifies JWTs. Owns the credential store. It is the only service that ever sees a password. |
-| Node auth stub | provided, used in 6 and 7 | Node, minimal HTTP server | 3000 | Issues test JWTs with identical claims to the real service so that Sprint 6 and Sprint 7 work can be authenticated before Node is taught. Discarded in Sprint 8. |
-| Trade REST API | 6 | Spring Boot 3.x, MyBatis 3.5, Bean Validation, Docker | 8080 | The write path. Validates orders against the business rules, persists them, publishes them to `orders`. Serves account details, balance, positions and order history. Verifies the JWT on every `/api/**` route. |
-| Trading domain engine | 5 | Java 21, JUnit 5 | none | Entities, enums, DTOs, exception hierarchy and the buy and sell rules. No database access, no HTTP, no framework annotations beyond validation. Packaged as a module inside the Trade REST API from Sprint 6 onwards. |
-| Kafka broker | 7 | Apache Kafka 3.x or 4.x | 9092 externally, 29092 inside the compose network | Carries `orders`, `trade-events` and `market-data`. See `contracts/kafka-topics.md`. |
-| Trade Executor | 7 | Java 21 or Python, Kafka consumer and producer | health endpoint on 8082 | Consumes `orders`, prices the order against a live Fauxnance quote, decides fill or reject, writes the fill, updates cash and position atomically, publishes the lifecycle event to `trade-events`. Students build this; no broker simulator is provided. |
-| Market-data poller | 7 | Python, requests, kafka-python | health endpoint on 8083 | Polls `GET /quotes?symbols=...` on Fauxnance on a fixed interval for the instruments the platform holds, and publishes each quote to `market-data`. Fauxnance has no streaming interface, so this poller is what makes a price stream exist. |
-| Portfolio and P&L service | 10, extension | Team's choice, Spring Boot recommended | 8081 | Consolidated holdings, cost basis, realised and unrealised profit and loss. Prices positions from Fauxnance quotes. See `contracts/portfolio-api.yaml`. |
-| Other extension services | 10, extension | Team's choice | 8084 upwards, or 3001 upwards for Node services | Watchlists and price alerts, Customer notifications, Customer preferences, Trade advice and signals, Automated strategy execution. |
+| Node auth stub | provided, used in 6 and 7 | Node, minimal HTTP server | 3000 in the claims contract, published on 3001 locally so it can run beside the real auth service | Issues test JWTs with identical claims to the real service so that Sprint 6 and Sprint 7 work can be authenticated before Node is taught. Discarded in Sprint 8. |
+| Trade REST API | 6, extended in 10 | Spring Boot 3.x, MyBatis 3.5, Bean Validation, Docker | 8080 | The write path. Validates orders against the business rules, persists them, publishes them to `orders`. Serves account details, balance, positions and order history. Verifies the JWT on every `/api/**` route. Holds the Sprint 5 domain model as a source package, and every Sprint 10 extension as a further package with its own routes and its own Kafka consumers. |
+| Kafka broker | 7 | Apache Kafka 3.x or 4.x | 9092 externally, 29092 inside the compose network | Carries `orders`, `trade-events` and `market-data`. The team creates the topics and configures every producer and consumer. See `contracts/kafka-topics.md`. |
+| Trade Executor | 7 | Java 21, Kafka consumer and producer | health endpoint on 8082 | Consumes `orders`, prices the order against a live Fauxnance quote, decides fill or reject, writes the fill, updates cash and position atomically, publishes the lifecycle event to `trade-events`. Also runs the market-data poller on a schedule, calling the Fauxnance batch quotes endpoint for held and watched symbols and publishing one message per symbol to `market-data`. Students build this; no broker simulator is provided. |
 | PostgreSQL | 3 | PostgreSQL 16 or 17 | 5432 | The system of record. Accounts, instruments, orders, positions. Also holds the auth service's user table, in its own schema. |
 | Python ETL and dashboard | 4 and 7 | Python 3.12+, pandas, matplotlib or plotly, pytest | none | Batch extract from Postgres, transform, load into the analytical store. Dashboard reads the analytical store from Sprint 7 onwards, and Postgres directly before that. |
-| Analytical store | 4 and 7 | Snowflake, or DuckDB or SQLite as a flat-file fallback | none | Star schema over trades. See `contracts/analytics-schema.sql`. |
+| Analytical store | 4 and 7 | DuckDB | none | Star schema over trades, held in one file on disk. See `contracts/analytics-schema.sql`. |
 | Fauxnance API | provided | Managed HTTP service | `https://y4t9nq2bqf.execute-api.eu-west-2.amazonaws.com/v1` | EOD candles and delayed quotes. Authenticated with a per-student `X-Api-Key`, 2000 requests per day. Swagger at `/v1/docs`. |
-| SonarQube | 7 | SonarQube community | 9000 | Quality gate on the Java services and the Python pipeline. Optional to self-host; a hosted instance is acceptable. |
+
+SonarQube is a quality gate run against the code, not a component of the platform, so it does not appear in the table. Its place in Sprint 7 is unchanged: it gates the Java services and the Python pipeline, self-hosted on port 9000 or run against a hosted instance.
 
 ## Order placement, end to end
 
@@ -111,31 +90,30 @@ sequenceDiagram
   participant U as Angular UI
   participant A as Auth service
   participant T as Trade REST API
-  participant D as Domain engine
   participant P as PostgreSQL
   participant K as Kafka
   participant X as Trade Executor
   participant F as Fauxnance API
-  participant E as ETL and analytics
+  participant E as Analytics service
 
   U->>A: POST /auth/login
   A-->>U: accessToken, refreshToken
   U->>T: POST /api/v1/orders + Bearer token
-  T->>A: verify signature, or verify locally with the public key
-  T->>D: validate against business rules 1 to 5
+  T->>T: verify the JWT signature locally
   T->>P: SELECT account, instrument, position
-  D-->>T: accepted, or a domain exception
+  T->>T: validate against business rules 1 to 5 in the domain package
   T->>P: INSERT order status NEW, unique idempotencyKey
   T->>K: produce to orders, key accountId
   T-->>U: 200 orderId, status NEW
-  K->>X: consume orders
+  K->>X: consume orders, group trade-executor
   X->>F: GET /quotes/{symbol}
   F-->>X: price, asOf, marketState
   X->>X: apply fill rules against the quoted price
   X->>P: BEGIN; update order to FILLED or REJECTED; debit or credit cash; upsert position; COMMIT
   X->>K: produce to trade-events, key accountId
-  K->>E: consume trade-events, or batch extract from Postgres
-  E->>E: load FACT_TRADES in the analytical store
+  K->>T: consume trade-events, extension modules
+  P->>E: batch extract
+  E->>E: load FACT_TRADES in DuckDB
   U->>T: GET /api/v1/accounts/{id}/orders
   T-->>U: updated blotter
 ```
@@ -146,13 +124,14 @@ Points that matter, and are commonly got wrong:
 - The cash debit and the position update belong to the executor, in one transaction, not to the API. The API only validates and records intent.
 - Idempotency is enforced by a unique constraint on `orders.idempotency_key`, not by an application-level check. A duplicate key is a `409 ORD-409`.
 - The executor is a consumer group. Two instances of it must not double-fill the same order. Keying by `accountId` and enforcing the order status transition inside the database transaction is what makes that safe.
-- Rejections are events too. A rejected order publishes to `trade-events` with `eventType: REJECTED`, so notifications and analytics see it.
+- Rejections are events too. A rejected order publishes to `trade-events` with `eventType: ORDER_REJECTED`, so notifications and analytics see it.
+- The domain call is in-process, which is why it appears as the API calling itself rather than as a separate participant. The layering rule is unchanged by that: no SQL in a controller, no HTTP type in the domain package, and no Spring annotation in the domain package beyond validation. Review enforces it, rather than a Maven boundary.
 
 ## Operational and analytical split
 
 | Concern | Operational | Analytical |
 |---|---|---|
-| Store | PostgreSQL | Snowflake, or DuckDB or SQLite file |
+| Store | PostgreSQL | DuckDB, one file on disk |
 | Model | Normalised to third normal form, per `contracts/database-schema.sql` | Star schema, per `contracts/analytics-schema.sql` |
 | Written by | Trade REST API, Trade Executor, Auth service | Python ETL only |
 | Read by | All services, the UI through the APIs | Dashboard, notebooks, extension analytics |
@@ -170,12 +149,12 @@ The load runs both ways in the platform but for different reasons. Batch ETL ext
 |---|---|---|---|---|
 | 3 | Trade database | Data | nothing | everything |
 | 4 | Analytics and first ETL | Analytics | Sprint 3 schema | dashboard, later the analytical store |
-| 5 | Trading domain engine | Domain | Sprint 3 model | Sprint 6 service |
-| 6 | Trade REST API | API | Sprint 5 engine, Sprint 3 schema, provided auth stub | UI, Kafka, extensions |
-| 7 | Kafka topics, Trade Executor, market-data poller, batch ETL | Messaging, Execution, Analytics | Sprint 6 API, Fauxnance | analytics, extensions, notifications |
+| 5 | Trading domain package | Domain | Sprint 3 model | Sprint 6 service, which absorbs it as source |
+| 6 | Trade REST API, holding the Sprint 5 domain package | API | Sprint 5 package, Sprint 3 schema, provided auth stub | UI, Kafka, the Sprint 10 extension modules |
+| 7 | Kafka topics, Trade Executor and the poller inside it, batch ETL | Messaging, Execution, Analytics | Sprint 6 API, Fauxnance | analytics, extension modules, notifications |
 | 8 | Auth service | Security | Sprint 3 schema, Sprint 6 API to protect | UI, every API |
 | 9 | Angular UI | Presentation | Sprints 6 and 8 contracts | end users |
-| 10 | Extension microservices | varies | all core components | the team's distinctive capability |
+| 10 | Extension modules inside the Trade REST API | API | all core components | the team's distinctive capability |
 | 11 | S3 and CloudFront deployment | Delivery | Sprint 9 build | a reachable system |
 
 ## Security boundaries
@@ -190,8 +169,8 @@ The load runs both ways in the platform but for different reasons. Batch ETL ext
 | Any service to Fauxnance | `X-Api-Key` from an environment variable. Never commit a key. Never send a key to the browser. | 7 |
 | Deployed UI to S3 | Private bucket, origin access control, reachable only through CloudFront | 11 |
 
-The Fauxnance key rule has a direct consequence for the architecture: the Angular UI must never call Fauxnance directly. Prices reach the browser through the Trade REST API, the Portfolio service, or a `market-data` consumer, never from client-side JavaScript holding a key.
+The Fauxnance key rule has a direct consequence for the architecture: the Angular UI must never call Fauxnance directly. Prices reach the browser through the Trade REST API, including its extension modules, or through a `market-data` consumer, never from client-side JavaScript holding a key. The Trade Executor is the only platform service that calls Fauxnance for quotes, which is what keeps the quote key in one place.
 
 ## Local topology
 
-Development runs under Docker Compose: Postgres, Kafka, the Trade REST API, the auth service or stub, the executor and the poller. The Angular dev server and the Python tooling run on the host. Nothing in the platform requires cloud infrastructure before Sprint 11, and Sprint 11 deploys only the Angular build.
+Development runs under Docker Compose: Postgres, Kafka, the Trade REST API with its domain package and its extension modules, the auth service or stub, and the Trade Executor, which runs the market-data poller on its own schedule. Six containers, and nothing listens on 8081 or 8083. The Angular dev server and the Python tooling run on the host. Nothing in the platform requires cloud infrastructure before Sprint 11, and Sprint 11 deploys only the Angular build.

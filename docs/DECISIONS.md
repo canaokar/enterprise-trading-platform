@@ -34,7 +34,9 @@ Swagger UI is at `/v1/docs`.
 
 **Why.** The service already exists, is stable, and covers both US and Indian symbols (`INFY.NS`, `RELIANCE.NS`, `TATASTEEL.BO`) as well as FX and crypto, so both cohorts can trade instruments they recognise. Building a second pricing service for the programme would duplicate it.
 
-**What changes.** Fauxnance serves end-of-day candles and delayed quotes. There is no WebSocket and no server-sent events. The "real-time price stream" the deck refers to therefore does not arrive by itself. In Sprint 7, participants write a small poller that calls the batch quotes endpoint on an interval and publishes each quote onto the `market-data` topic. That poller is what creates the stream, and its existence is the reason Sprint 10 extensions such as Watchlists and Automated Strategy Execution have anything to consume.
+**What changes.** Fauxnance serves end-of-day candles and delayed quotes. There is no WebSocket and no server-sent events. The "real-time price stream" the deck refers to therefore does not arrive by itself. In Sprint 7, participants write a poller as a scheduled component inside the Trade Executor, in Java, alongside the consumer it sits next to. It calls the batch quotes endpoint on an interval for the symbols the platform holds and watches, and publishes one message per symbol onto the `market-data` topic. That poller is what creates the stream, and its existence is the reason Sprint 10 extensions such as Watchlists and Automated Strategy Execution have anything to consume.
+
+The poller is not a deployable of its own. It sits in the executor because the executor already calls Fauxnance to price a fill, which settles the argument about which service holds the quote key: one service calls Fauxnance, one service holds the key. See `TARGET_ARCHITECTURE.md` and decision 7.
 
 The 2000-per-day quota constrains design and is meant to. Teams that poll every symbol every second exhaust a key before lunch. Correct behaviour is to poll only held and watched symbols, to batch up to 25 symbols per call, and to cache. Instructors should let a team hit the limit once rather than warn them out of it.
 
@@ -53,6 +55,8 @@ Two operational rules are non-negotiable. Keys live in environment variables, ne
 5. Customer Preferences and Personalisation
 6. Automated Strategy Execution
 
+Each entry is a module inside the Trade REST API: its own routes, its own service layer, its own tables, and where it needs one its own Kafka consumer under its own group id. None of them is a separate deployable. The group ids stay distinct per module, `portfolio-service`, `notification-service` and so on, because a group id names a logical consumer and separate ids keep each module's offsets independent even though they now run in one process.
+
 **US and Ireland (12 weeks, Sprint 10):** exactly one extension is mandatory. The team chooses which.
 
 **India (9 weeks, Sprint 10):** all six are recommended. Four are mandatory:
@@ -62,11 +66,13 @@ Two operational rules are non-negotiable. Keys live in environment variables, ne
 - Customer Preferences and Personalisation
 - Customer Notifications
 
-**Why.** The US and Ireland run spends a full applied-project week on one extension and is assessed on depth, integration quality and the security review. The India cohort are returning interns who already hold the fundamentals, start at applied depth, and have a shorter run with less taught time per topic; four narrower extensions give them more integration surface and more visible product value in the same calendar space. The four chosen for India form one coherent customer-facing feature set rather than four unrelated services.
+**Why.** The US and Ireland run spends a full applied-project week on one extension and is assessed on depth, integration quality and the security review. The India cohort are returning interns who already hold the fundamentals, start at applied depth, and have a shorter run with less taught time per topic; four narrower extensions give them more integration surface and more visible product value in the same calendar space. The four chosen for India form one coherent customer-facing feature set rather than four unrelated features.
 
 **Dependencies, which drive build order.** Customer Notifications depends on Customer Preferences, because a notification cannot be routed without a channel preference. Watchlists alerting depends on Notifications, because a triggered threshold has to be delivered somewhere. India teams therefore build in the order Preferences, Notifications, Watchlists, with Portfolio and P&L independent of the other three and safe to build in parallel.
 
-A team that ships Watchlists with alerts written only to a log has not met the criterion. The alert must reach the Notifications service, which must respect the customer's stored channel preference.
+A team that ships Watchlists with alerts written only to a log has not met the criterion. The alert must reach the Notifications module, which must respect the customer's stored channel preference. Sharing one process does not remove the seam: the modules still call each other through their own interfaces and still fail independently.
+
+Authorisation gets harder in this shape, not easier, and that is worth the trouble. In a separate service a team could lean on the service boundary. In a shared service every extension route enforces its own authorisation, and a route that returns another customer's portfolio is a bug inside the same application that holds the order book. The Sprint 10 security review has more to find, not less.
 
 ---
 
@@ -79,7 +85,8 @@ The correct scope:
 | Area | In scope |
 |---|---|
 | AWS | IAM, AWS CLI, S3, CloudFront. Nothing else, and only in Sprint 11. |
-| Messaging | Apache Kafka only. |
+| Messaging | Apache Kafka only. The team creates the topics and owns the producer and consumer configuration; no topic-creation tooling is provided. |
+| Analytics | DuckDB as the analytical store. One file, no server, no account. |
 | End-to-end testing | Playwright, Sprint 9. |
 | Unit testing | JUnit 5 for Java, Jest for TypeScript, pytest for Python. |
 | CI | None. Checks and deployment run as scripts. |
@@ -98,7 +105,7 @@ The correct scope:
 
 **Why.** Sprint 6 teaches JWT validation in Spring Boot and requires a protected route to demonstrate it. Node and NestJS are not taught until Sprint 8. Without a stub, participants would either hard-code a token, which teaches nothing about verification, or disable security for two sprints and retrofit it, which is exactly the habit the programme is trying to break. The stub is provided rather than built because writing it would mean teaching Node two sprints early.
 
-**What changes.** The stub is a fixture, not a deliverable. It has no tests to write, no bugs planted in it and no assessment attached. Its claims contract is normative: `contracts/auth-api.yaml` describes both the stub and the Sprint 8 service, and the Sprint 8 acceptance criterion is that swapping one for the other requires no change to the Trade REST API beyond configuration. Both listen on port 3000 for that reason.
+**What changes.** The stub is a fixture, not a deliverable. It has no tests to write, no bugs planted in it and no assessment attached. Its claims contract is normative: `contracts/auth-api.yaml` describes both the stub and the Sprint 8 service, and the Sprint 8 acceptance criterion is that swapping one for the other requires no change to the Trade REST API beyond configuration. The claims contract puts both on port 3000 for that reason. Locally the stub is published on 3001 instead, so that it can run beside the real service during the cutover; which one a client trusts is still a matter of configuration alone.
 
 The stub's issuer name is `auth-stub` rather than `auth-service`, so that a team can prove which one signed a token during the Sprint 8 cutover.
 
@@ -116,6 +123,24 @@ The defect catalogue is instructor-only material. Do not commit it to either stu
 
 ---
 
+## 7. The platform is five services and a broker.
+
+**Decision.** The platform the graduates build is the Trade REST API, the Trade Executor, the auth service, the Angular application, the analytics service and the Kafka broker they stand up themselves. Five changes get it to that shape, and the specification for all of them, with the reasoning in full, is `TARGET_ARCHITECTURE.md`.
+
+1. The market-data poller becomes a scheduled component inside the Trade Executor, written in Java. See decision 2.
+2. The six catalogue extensions become modules inside the Trade REST API, each with its own routes, its own service layer and its own consumer group id. See decision 3.
+3. The Sprint 5 domain engine is built as a plain Java package that Sprint 6 absorbs as source, rather than as a separate Maven artifact installed to the local repository before the API will build.
+4. DuckDB is the analytical store, named plainly, with no Snowflake alternative offered.
+5. Kafka topic creation is the team's work. The provided creation script and the `kafka-init` container are gone, and auto-creation stays switched off.
+
+**Why.** By Sprint 10 the specified platform had eight or more deployable units, and every one beyond the first five cost a team the same fixed tax: a Dockerfile, a compose entry, a port, an environment block, a second copy of JWT verification, and an afternoon spent working out why a container cannot reach Postgres. That tax teaches deployment, which is Sprint 11's job and is taught there against one artefact. The integration lesson does not weaken, because five services still speak over HTTP, over Kafka and through a shared database, and the JWT still crosses every boundary. What goes away is the repeated wiring of a sixth, seventh and eighth container carrying one feature each.
+
+The other three changes follow the same reasoning. One language per service, so the poller stops being a Python container inside a Java execution path. One analytical store named plainly, so nobody spends a morning deciding whether they need an account. And one build command from a clean checkout, because the `mvn install` prerequisite broke a fresh machine and taught nothing about the domain.
+
+**What changes.** Nothing in the contracts moves: topic names, keys, partition counts, retention, endpoint paths and the analytical SQL are all unchanged, and `contracts/portfolio-api.yaml` still governs the portfolio routes exactly as written, now served by the Trade REST API on 8080. Assessment does not soften. Sprint 10 gains a harder authorisation problem, because every extension route enforces its own check inside the application that holds the order book. Sprint 7 gains topic creation and a written justification of the partition counts and keys as an assessed deliverable. Sprint 5 keeps its folder, its brief and its no-framework constraint, now enforced by review rather than by a module boundary.
+
+---
+
 ## Resolved contradictions in the source documents
 
 These are not new decisions. They record where the sources disagreed with themselves and what the reference implementation does.
@@ -124,11 +149,11 @@ These are not new decisions. They record where the sources disagreed with themse
 |---|---|
 | `Account.id` is a `Long` surrogate key while `Account.accountId` is a `String` business identifier (17.1), but `Order.accountId` is a `Long` (17.2) and the API example sends `"accountId": 1` (19.1). | The name `accountId` means the numeric `ACCOUNTS.id` everywhere in the API, in `ORDERS`, in `POSITIONS` and in the JWT `accountId` claim. The string business identifier appears only as `ACCOUNTS.account_id` and in `AccountResponse.accountId`, where it is documented as such. The reference DDL keeps both columns exactly as specified, with a comment on the collision. |
 | `POST /api/v1/orders` returns `"status": "FILLED"` (19.1), but Sprint 7 makes execution asynchronous. | Both are correct at different points in the build. Sprint 6 fills synchronously and returns `FILLED` or `REJECTED`. From Sprint 7 the endpoint returns `NEW` and the fill arrives on `trade-events`. The contract documents both and the UI must handle both. |
-| A basic Portfolio REST API is described as provided in Sprint 6, and Portfolio and P&L is also an optional Sprint 10 extension. | Sprint 6 exposes balance and positions on the account endpoints of the Trade REST API, as specified in 19.2. There is no separate Sprint 6 Portfolio service. The Sprint 10 extension is a distinct service that adds market valuation, cost basis and profit and loss. |
+| A basic Portfolio REST API is described as provided in Sprint 6, and Portfolio and P&L is also an optional Sprint 10 extension. | Sprint 6 exposes balance and positions on the account endpoints of the Trade REST API, as specified in 19.2. There is no separate Sprint 6 Portfolio service. The Sprint 10 extension is a distinct set of routes on the Trade REST API, under `contracts/portfolio-api.yaml`, adding market valuation, cost basis and profit and loss. |
 | The topic carrying new orders is named `trades` (10.3) while the messages on it are placed orders. | The canonical name is `orders`. `trades` is accepted where a team has already built against it, but a repository must use one name consistently. |
 | The lenses slide places TDD in Sprint 6, characterisation tests and SonarQube in Sprint 5, and DevSecOps in Sprint 5. The detailed weekly schedules place TDD in Sprint 5, and refactoring, SonarQube and DevSecOps in Sprint 7. | The detailed weekly schedules are correct. The lenses slide is off by one or two sprints throughout. |
 | Sprint 8 material refers to "the Sprint 7 stub". | The auth stub is introduced in Sprint 6 and used through Sprint 7. See decision 5. |
 | The Sprint 6 capstone cell in the weekly plan reads "team microservice choice documented; service scaffolded". | Boilerplate carried over from another template. The Sprint 6 deliverable is the Trade REST API. Extension choice is confirmed in Sprint 10. |
-| Analytics is specified as Snowflake, while the Sprint 7 lab offers "Snowflake overview or flat file". | Either is acceptable in delivery. `contracts/analytics-schema.sql` is plain ANSI SQL and runs on Snowflake, DuckDB or SQLite. Teams without a Snowflake account use DuckDB. |
+| Analytics is specified as Snowflake, while the Sprint 7 lab offers "Snowflake overview or flat file". | The analytical store is DuckDB, named plainly and with no alternative offered. `contracts/analytics-schema.sql` is plain ANSI SQL and runs on it unchanged, which is the property that made the choice safe. What is assessed is the star schema, the load and the separation from the operational store, none of which is a property of the vendor. |
 | The India weekly cadence dates Week 8 as commencing 5 October and marks its Friday as Gandhi Jayanti, which falls on 2 October. | The holiday markers in `CURRICULUM_MAP.md` follow the programme owner's instruction: Monday of India week 6 and Friday of India week 8. Confirm the calendar dates with the delivery team before publishing a dated schedule. |
 | The programme is described as 11 weeks in the outcomes slides and runs across 12 calendar weeks in the schedule. | Twelve calendar weeks for US and Ireland: an induction week plus eleven sprints. Capstone components run in Sprints 3 to 11, which are calendar weeks 4 to 12. |

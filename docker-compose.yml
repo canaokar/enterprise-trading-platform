@@ -6,9 +6,9 @@
 #
 # `docker compose --profile platform up` starts everything: the two
 # infrastructure services plus the Trade REST API, the auth service, the
-# auth stub, the Trade Executor, the market-data poller and the Portfolio
-# and P&L service. See infra/README.md for what each one needs, which ports
-# they listen on, and how to bring up a partial stack for one sprint's work.
+# auth stub and the Trade Executor. Six containers in total. See
+# infra/README.md for what each one needs, which ports they listen on, and
+# how to bring up a partial stack for one sprint's work.
 #
 # Environment variables are read from .env at the repository root. Copy
 # .env.example to .env before running anything here.
@@ -71,6 +71,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Topics are created by the team in Sprint 7. Auto-creation would
+      # silently produce a one-partition topic with default retention.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
@@ -83,30 +85,12 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  # One-shot topic creation. Runs infra/kafka/create-topics.sh once the
-  # broker is healthy, then exits. Auto-creation is switched off above
-  # because it silently produces a one-partition, default-retention topic,
-  # which is wrong for all three topics this platform uses.
-  kafka-init:
-    image: apache/kafka:3.8.0
-    container_name: kafka-init
-    networks: [trading-net]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    volumes:
-      - ./infra/kafka/create-topics.sh:/kafka-scripts/create-topics.sh:ro
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    entrypoint: ["bash", "/kafka-scripts/create-topics.sh"]
-    restart: "no"
-
   # ---------------------------------------------------------------------------
   # Platform services. Profile "platform": included only when asked for.
   #
-  # Build contexts point at services/ and extensions/ directories owned by
-  # other tracks of this build and are not present at the time this compose
-  # file was written. `docker compose config` validates the file's shape
+  # Build contexts point at services/ directories owned by other tracks of
+  # this build and are not present at the time this compose file was
+  # written. `docker compose config` validates the file's shape
   # without needing the contexts to exist; `docker compose --profile
   # platform up` needs them present with a Dockerfile before it can build.
   # ---------------------------------------------------------------------------
@@ -135,8 +119,6 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8080' || exit 1"]
       interval: 10s
@@ -147,8 +129,8 @@ services:
 
   # NestJS auth service, Sprint 8 onwards. Owns the credential store. Issues
   # and verifies JWTs with the same claims contract as auth-stub, so the
-  # Trade REST API and the Portfolio and P&L service do not care which of
-  # the two signed a given token, only that JWT_SECRET matches.
+  # Trade REST API does not care which of the two signed a given token, only
+  # that JWT_SECRET matches.
   auth-service:
     build:
       context: ./services/auth-service
@@ -209,8 +191,10 @@ services:
 
   # Kafka consumer group "trade-executor". Consumes orders, prices against a
   # live Fauxnance quote, fills or rejects, writes order, cash and position
-  # atomically, publishes to trade-events. No inbound port in the API
-  # contract; the health endpoint is documented in ARCHITECTURE.md.
+  # atomically, publishes to trade-events. Also runs the scheduled
+  # market-data poller, which is why it carries POLL_INTERVAL_SECONDS. No
+  # inbound port in the API contract; the health endpoint is documented in
+  # ARCHITECTURE.md.
   trade-executor:
     build:
       context: ./services/trade-executor
@@ -233,91 +217,14 @@ services:
       KAFKA_CONSUMER_GROUP: trade-executor
       FAUXNANCE_BASE_URL: ${FAUXNANCE_BASE_URL}
       FAUXNANCE_API_KEY: ${FAUXNANCE_API_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8082' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    restart: unless-stopped
-
-  # Polls Fauxnance on an interval for held and watched symbols, publishes
-  # one message per symbol to market-data. Has no database dependency: it
-  # only reads Fauxnance and writes Kafka.
-  market-data-poller:
-    build:
-      context: ./services/market-data-poller
-    container_name: market-data-poller
-    profiles: [platform]
-    networks: [trading-net]
-    ports:
-      - "8083:8083"
-    environment:
-      PORT: 8083
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
-      FAUXNANCE_BASE_URL: ${FAUXNANCE_BASE_URL}
-      FAUXNANCE_API_KEY: ${FAUXNANCE_API_KEY}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
     depends_on:
-      kafka:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8083' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
-
-  # Portfolio and P&L extension. Service name matches the hostname assumed
-  # by docs/contracts/portfolio-api.yaml: portfolio-service. Reads positions
-  # from postgres, prices them from Fauxnance, reads cash balance from the
-  # Trade REST API, and verifies the platform JWT itself rather than
-  # trusting an upstream to have done so.
-  portfolio-service:
-    build:
-      context: ./extensions/portfolio-pnl
-    container_name: portfolio-service
-    profiles: [platform]
-    networks: [trading-net]
-    ports:
-      - "8081:8081"
-    environment:
-      PORT: 8081
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-trading}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_dev_password}@postgres:5432/${POSTGRES_DB:-trading}
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB:-trading}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_USERNAME: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
-      KAFKA_CONSUMER_GROUP: portfolio-service
-      FAUXNANCE_BASE_URL: ${FAUXNANCE_BASE_URL}
-      FAUXNANCE_API_KEY: ${FAUXNANCE_API_KEY}
-      JWT_SECRET: ${JWT_SECRET}
-      TRADE_API_BASE_URL: http://trade-api:8080
-    depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      trade-api:
-        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8081' || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8082' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
