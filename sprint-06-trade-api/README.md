@@ -8,25 +8,36 @@ claim to be, applies the rules you wrote in Sprint 5, writes the result to the
 schema you designed in Sprint 3, and answers in a shape the Angular
 application can generate a client from.
 
-Being the front door is the whole of its job. The service does not decide
-whether a trade is allowed, because that decision belongs to the domain module
-and a second caller reads the same rules from a Kafka consumer next sprint. It
-does not price anything, because there is no live quote in this sprint and
-pricing belongs to the Trade Executor. What it owns is transport and
-persistence: turning JSON into a domain call, turning a domain exception into
-a documented error code, and holding one database transaction open around the
-work that has to succeed or fail together.
+What the service owns is transport and persistence: turning JSON into a domain
+call, turning a domain exception into a documented error code, and holding one
+database transaction open around the work that has to succeed or fail
+together. It decides nothing about whether a trade is allowed, because that
+decision belongs to the domain. It prices nothing, because there is no live
+quote this sprint and pricing belongs to the Trade Executor.
 
-Keeping it thin is not tidiness. In Sprint 7 the same rules run in a second
-process, minutes later, against a price that did not exist when the order was
-placed. Every rule that leaked into a controller this week has to be written
-again there, and the two copies drift. The first drift is a customer whose
-order this service accepted and the executor refused.
+It is also the host. The Sprint 5 domain package moves in here this week, as
+source, and this service is the only place in the platform that holds it. In
+Sprint 10 your extension arrives the same way: further packages inside this
+service, with their own routes on the same port and their own Kafka consumers.
+Two things follow. The layering you set up this week is the layering those
+packages are added to five weeks from now, so a query written in a controller
+is not a shortcut you pay for once. And the token verification you write once,
+for every route under `/api/v1/`, is what will protect routes nobody has
+designed yet.
+
+Keeping the service thin is still not tidiness. The rules that decide whether
+an order may be placed are read again by whoever writes the Trade Executor in
+Sprint 7, which settles that same order in another process, minutes later,
+against a price that did not exist when it was placed. A rule that leaked into
+a controller has to be found there and written again, and the two copies
+drift. The first drift is a customer whose order this service accepted and the
+executor refused.
 
 ## What you deliver
 
 | Deliverable | Where it lives |
 |---|---|
+| The Sprint 5 domain package, moved in as source | `src/main/java/`, under its own package |
 | Six endpoints implementing `contracts/trade-api.yaml` | `src/main/java/`, under your base package |
 | A layered controller, service and mapper structure | as above, one package per layer |
 | MyBatis mappers with parameterised statements | `src/main/resources/mapper/`, or annotations on the mapper interfaces |
@@ -35,12 +46,40 @@ order this service accepted and the executor refused.
 | Tests, unit and slice, that run without a container | `src/test/java/` |
 | A multi-stage `Dockerfile` | this folder |
 | Your service added to the root `docker-compose.yml` | repository root |
-| The manifest telling the check harness your names | `manifest.env` |
 
 The scaffold gives you the Maven build, the package tree, the configuration
-skeleton, the harness and a deliberately bad Dockerfile to improve on. Every
-class is yours to write. There are no stubs to fill in: deciding what belongs
-in which layer is most of what this sprint assesses.
+skeleton and a deliberately bad Dockerfile to improve on. The
+package tree includes an empty package for the domain, at the name the Sprint 5
+scaffold declares. Every class is yours to write. There are no stubs to fill
+in: deciding what belongs in which layer is most of what this sprint assesses.
+
+## The Sprint 5 package moves in
+
+The domain you built last week is not a dependency of this service. It is part
+of it. Copy the sources under `sprint-05-domain-engine/src/main/java` into
+`src/main/java` here, keeping the package name, and copy the tests into
+`src/test/java` so that they keep running.
+
+Copy rather than move. Sprint 5 is assessed in its own folder against its own
+criteria, and that folder is the record of last week's deliverable. From this
+week onwards the copy inside this service is the one the platform runs and the
+one you change.
+
+There is no artefact and no `mvn install` step, and that is the point of doing
+it this way. A separate Maven module means a build here that fails on any
+machine where nobody has installed the domain into a local repository, which
+is every fresh checkout, every new laptop and every image build. One project,
+one `mvn verify`, and the Sprint 5 tests run in this service's suite beside
+the ones you write this week.
+
+What does not change is the constraint the module boundary used to enforce.
+The domain package holds no Spring annotation beyond Bean Validation, no
+servlet type, no MyBatis type and no SQL. It is now a rule about what may
+appear inside a package rather than one a build enforces from outside, which
+is the form the constraint takes in most real codebases, and it is easier to
+break now that the domain and the service compile together: an import that
+would have failed the Sprint 5 build resolves here without complaint. Nothing
+outside the review catches it, so the package is read for those types.
 
 ## The contract is the specification
 
@@ -103,7 +142,7 @@ Three layers, and each one is allowed to speak exactly one language.
 | Layer | Speaks | Must not |
 |---|---|---|
 | Controller | HTTP, DTOs, status codes, validation annotations | Contain SQL, open a transaction, or hold a business rule |
-| Service | The domain module, mappers, one transaction | Take a servlet type, a request object or a status code as a parameter |
+| Service | The domain package, mappers, one transaction | Take a servlet type, a request object or a status code as a parameter |
 | Mapper | SQL, parameterised, and result mapping | Decide anything, or reach back into HTTP |
 
 Two violations fail review on sight.
@@ -114,17 +153,18 @@ needs the same rows next sprint, and puts the shape of your schema in the same
 file as the shape of your JSON. When the schema moves, the controller changes,
 and nothing about the transport changed.
 
-**An HTTP type in the domain.** The domain module you published in Sprint 5
-must still build with no servlet API and no Spring on its classpath. A domain
-exception that carries an HTTP status, an entity annotated for a web
-framework, or a rule that takes a request DTO has bound the rules to one
-caller. The Trade Executor in Sprint 7 is the second caller, it has no HTTP
-request, and it needs the same rules unchanged.
+**An HTTP type in the domain.** A domain exception that carries an HTTP
+status, an entity annotated for a web framework, or a rule that takes a
+request DTO has bound the rules to one caller. Whoever writes the Trade
+Executor in Sprint 7 has no HTTP request and needs the same rules to mean the
+same thing, and the Sprint 10 extension routes read the same domain from a
+second set of controllers in this service.
 
-The harness checks the first by reading your controller sources for mapper,
-JDBC and MyBatis imports, and the second by reading the compiled classes of
-your Sprint 5 artefact. Neither check can see a rule you wrote in a controller
-without touching a mapper, which is why the layering is also read by a human.
+The first shows up as a mapper, JDBC or MyBatis import in a controller source.
+The second shows up as a servlet, Spring or MyBatis type inside the domain
+package. Neither is the whole of it: a business rule written in a controller
+that touches no mapper leaves no import behind, so the layering is read rather
+than searched for.
 
 ## MyBatis, and why interpolation is a security finding
 
@@ -145,13 +185,12 @@ whichever account the attacker asked for. That is OWASP A03, injection, and in
 this service the values arriving from outside include an account key, a
 symbol, a status filter and two timestamps.
 
-The harness fails the build on any `${}` in a mapper. There is one legitimate
-use, a column name or a sort direction that cannot be a bind parameter, and it
-is legitimate only when the value is checked against a fixed list of permitted
-names before it reaches the statement. If you need it, declare the file and the
-token in `MAPPER_SQL_INTERPOLATION_ALLOWLIST` in `manifest.env`, with a comment
-saying what constrains the value. The allowlist ships empty, and an entry in it
-is a question you will be asked in the review.
+Any `${}` in a mapper fails criterion 3. There is one legitimate use, a column
+name or a sort direction that cannot be a bind parameter, and it is legitimate
+only when the value is checked against a fixed list of permitted names before it
+reaches the statement. If you need it, put a comment above the statement naming
+what constrains the value, and bring the list of every such statement to the
+review. Each one is a question you will be asked.
 
 ## Optimistic locking on the account version column
 
@@ -261,11 +300,12 @@ What a correct one does:
   layer holding the resolved dependencies.
 - Exposes the service port and answers a health check.
 
-One constraint decides the shape of the build stage. This service resolves the
-Sprint 5 domain module from a local Maven repository, and the image build has
-no access to the one on your laptop. The build stage therefore has to build
-both projects, which means the build context has to contain both folders. Set
-the context and the Dockerfile path in the compose file accordingly.
+One constraint has gone this year, and it is worth knowing that it was there.
+When the domain was a separate artefact, the image build could not reach the
+local Maven repository on your laptop, so the build context had to be the
+repository root and the build stage had to compile two projects before it
+could package one. The domain is source in this project now. The context is
+this folder, and the build stage runs one `mvn package`.
 
 Adding the service to `docker-compose.yml` is your change, in your own copy of
 the repository. A correct entry:
@@ -290,31 +330,18 @@ Java 21 and Maven 3.9 or later, Spring Boot, MyBatis, the Postgres JDBC driver
 and Docker.
 
 ```bash
-cd sprint-05-domain-engine && mvn install    # publish the domain module first
-
 cd sprint-06-trade-api
 mvn clean verify                             # build and test
 mvn spring-boot:run                          # run against the compose stack
-
-scripts/check.sh                             # the acceptance harness
-scripts/check.sh --live                      # and the endpoint probes
 ```
 
-There is no aggregator build. This service resolves your Sprint 5 module from
-your local Maven repository by its coordinates, so `mvn install` there has to
-happen before `mvn verify` here, and again whenever the domain changes.
-
-Those coordinates appear in three places and all three have to agree: the
-`<groupId>`, `<artifactId>` and `<version>` in `sprint-05-domain-engine/pom.xml`,
-the `domain.groupId`, `domain.artifactId` and `domain.version` properties in
-`pom.xml` here, and `DOMAIN_GROUP_ID`, `DOMAIN_ARTIFACT_ID` and
-`DOMAIN_VERSION` in `manifest.env`. The scaffold ships them set to what the
-Sprint 5 scaffold declares. If your team changed them there, change them in
-both places here.
+One project and one build. Nothing has to be installed anywhere first, and
+nothing outside this folder has to be built before it, which is what the
+domain being source here buys you.
 
 The package tree ships as empty packages, each with a `package-info.java`
-stating what belongs in it. Rename or reorganise them if your design says
-something else, and tell the harness what you chose in `manifest.env`.
+stating what belongs in it, including the one the domain lands in. Rename or
+reorganise them if your design says something else.
 
 `src/main/resources/application.yml` is a skeleton of the sections the service
 needs, with comments and without values. Every value that differs between a
@@ -339,74 +366,30 @@ These are the criteria your instructor assesses against.
 7. A protected route rejects a missing or invalid token with `AUTH-401`.
 8. The service builds and runs from a multi-stage Dockerfile.
 
-## The check harness
+## The review
 
-`scripts/check.sh` asserts the things a machine can assert. It has two modes.
+Your instructor assesses this sprint by reading the code against the criteria
+above and by exercising the running service. Structure is the easy half. A
+mapper can bind every parameter and still run the wrong statement, and an
+annotation can be present with the transaction boundary in the wrong place.
 
-**Static mode** is the default. It needs no container, no database and no
-running service, and it never calls the Fauxnance API. Run it as often as you
-like.
-
-```bash
-scripts/check.sh
-```
-
-| Check | What it proves |
-|---|---|
-| `mvn clean verify` succeeds from a clean state | The service builds and its own tests pass, from the files in the repository |
-| Your Sprint 5 artefact resolves from your local Maven repository | Criterion 2, the dependency half, and that `mvn install` happened there |
-| No `jakarta.servlet`, Spring or MyBatis type in that artefact's compiled classes | Criterion 2, the domain half |
-| No `${}` in any mapper statement, XML or annotation | Criterion 3 |
-| The order placement path carries `@Transactional` | Criterion 5 |
-| A `@ControllerAdvice` or equivalent exists | Criterion 4, the existence half |
-| Controller sources import no mapper, JDBC or MyBatis type, and hold no SQL literal | Criterion 2, the controller half |
-| `Dockerfile` has more than one stage and its final stage is not a build image | Criterion 8 |
-| The account version column appears in a mapper that updates | Criterion 6, the static half |
-
-**Live mode** adds the endpoint probes. It needs your stack up: your schema and
-seed data applied, the auth stub running, and your service running and
-reachable.
-
-```bash
-docker compose --profile platform up -d --build
-scripts/check.sh --live
-```
-
-| Probe | What it proves |
-|---|---|
-| A token is obtained from the auth stub and accepted | Criterion 7, the positive half |
-| A missing token and an invalid token on a protected route | Criterion 7: both `AUTH-401`, both in the envelope |
-| All six endpoints answer with the status and the body shape the contract states | Criterion 1 |
-| An unknown account, an unknown instrument, an inactive account, an unaffordable buy, a reused idempotency key and an invalid field | Criterion 1, the catalogue half: the envelope and the code for each |
-| Several concurrent orders against one account, with the cash movement reconciled afterwards | Criterion 6, behaviourally: a lost update shows up as cash that did not move |
-
-The harness reads your base package, your layer packages, your Sprint 5
-coordinates and the names live mode needs from `manifest.env`, so it asserts
-your design rather than dictating one. Live mode makes no assumption about your
-schema: it goes through your API, and the only names it needs are the demo user
-whose token reaches an active account, the demo user whose account you seeded
-inactive, and one symbol you seeded as tradable.
-
-### What passing does not mean
-
-The harness reads structure, not meaning. It confirms that a mapper binds its
-parameters without knowing whether the statement is the right one, and that an
-annotation is present without knowing whether the transaction boundary is
-where it should be.
-
-Assessed by a human at the review, and not by this script:
+Read rather than searched for:
 
 - whether the transaction boundary encloses the work that has to be atomic,
   and nothing more
 - whether every domain exception reaches the advice and leaves as its
   documented code, rather than most of them
-- whether the layering holds in the places a grep cannot see, including a
+- whether the layering holds in the places a search cannot see, including a
   business rule written in a service that should have called the domain
 - whether the optimistic lock is applied to every write to the account row
 - whether the response bodies match the contract field for field, including
   the two meanings of `accountId`
 - whether the image would survive being deployed, including what it runs as
 
-Bring to the review: the running stack, one order traced from the request to
-the committed row, your Dockerfile, and your answer to what happens when two
-customers spend the same money at the same moment.
+Bring to the review: the running stack with the auth stub beside it, one order
+traced from the request to the committed row, each of the seven error codes in
+the catalogue produced on demand in the envelope, a missing token and an invalid
+token on a protected route, several concurrent orders against one account with
+the cash reconciled against the order history afterwards, your Dockerfile, and
+your answer to what happens when two customers spend the same money at the same
+moment.

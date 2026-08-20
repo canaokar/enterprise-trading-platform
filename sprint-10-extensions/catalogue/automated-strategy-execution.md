@@ -17,25 +17,31 @@ needs the last of those too, and needs it to work immediately.
 
 ## What it integrates with
 
-| Surface | How this service uses it |
+| Surface | How this module uses it |
 |---|---|
 | `market-data` | Consume, group `strategy-service`. The price that entry and exit conditions are evaluated against. |
-| `trade-events` | Consume, group `strategy-service`. What happened to the orders this service placed, and what the account now holds. |
-| Trade REST API `POST /api/v1/orders` | How orders are placed. Authenticated, with a strategy-generated idempotency key. |
+| `trade-events` | Consume, group `strategy-service`. What happened to the orders this module placed, and what the account now holds. |
+| `POST /api/v1/orders` | How orders are placed. Through the same route a customer uses, with a strategy-generated idempotency key. |
 | Angular application | Strategy configuration, the enabled state, and the execution log. |
 
-This service does not produce to `orders`. Publishing straight onto the topic
-skips the Trade REST API's business rules and its idempotency check, which are
-the two things standing between a strategy bug and an unrecoverable position.
-Place orders the way the UI places them.
+This module does not produce to `orders`. Publishing straight onto the topic
+skips the business rules and the idempotency check, which are the two things
+standing between a strategy bug and an unrecoverable position. Place orders the
+way the UI places them, through the route rather than around it. Sharing a
+process with the order placement code makes the shortcut easy to take and no
+less wrong: a call straight into the order service skips the validation, the
+authorisation and the error mapping the route performs.
 
 ## The API is yours
 
 There is no contract for this extension. Design the API, write it as OpenAPI
 before you write the controller, and bring it to your instructor on day one for
 review. The platform conventions still bind: the `{errorCode, message}` envelope,
-the platform error catalogue extended only where nothing in it fits, and a bearer
-token verified by this service itself.
+the platform error catalogue extended only where nothing in it fits, and the
+bearer token the Trade REST API verifies before any of your routes run. What the
+verifier cannot decide for you is whether this caller may reach this resource,
+so every route you add compares the `accountId` claim against what it is about
+to return.
 
 ## What makes it worth building
 
@@ -81,5 +87,5 @@ strategies sharing an account-level cap, and a platform-wide kill switch.
   of rule types with parameters.
 - **Off means off.** Check the enabled flag at the point of decision, and prove
   it live by disabling a strategy mid-cycle.
-- **Every order is traceable.** For any order this service placed, the execution
+- **Every order is traceable.** For any order this module placed, the execution
   log says which strategy placed it and which condition fired.

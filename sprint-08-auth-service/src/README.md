@@ -23,5 +23,5 @@ Nothing depends on `auth`. A cycle in that graph means a module has taken on a
 second responsibility, and the usual sign of it is a repository that has started
 throwing an HTTP status.
 
-Reorganise this tree if your design says something else. Tell the harness what
-you chose in `manifest.env`.
+Reorganise this tree if your design says something else, and be ready to say
+why in the review.

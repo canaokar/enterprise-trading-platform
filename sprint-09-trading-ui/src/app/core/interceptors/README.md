@@ -15,4 +15,4 @@ outgoing URL against the origins in `src/environments/`, not by excluding a list
 you happen to have thought of.
 
 The spec beside this file is a deliverable. It covers the attaching case and the
-not-attaching case, and the harness looks for both by name.
+not-attaching case, each named for what it asserts.

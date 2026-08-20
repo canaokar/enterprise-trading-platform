@@ -38,14 +38,7 @@ Sprint 4 has nothing to plot.
 
 ## Reloading
 
-```bash
-sprint-03-trade-database/scripts/apply.sh
-```
-
-Applies migrations and then these files. Inserts that collide with rows
-already present will fail, which is correct: seed data is loaded into a known
-state, not merged into an unknown one. To reload cleanly:
-
-```bash
-sprint-03-trade-database/scripts/apply.sh --fresh
-```
+Your apply command runs the migrations and then these files. Inserts that
+collide with rows already present will fail, which is correct: seed data is
+loaded into a known state, not merged into an unknown one. Reload cleanly by
+dropping the database first and rebuilding it from the files.

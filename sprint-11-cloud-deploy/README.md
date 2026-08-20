@@ -10,10 +10,12 @@ stand in front of a panel and demonstrate the whole platform. The two halves are
 not separate: the deployed link is what the panel loads while you talk.
 
 Only the Angular application is deployed. Postgres, Kafka, the Trade REST API,
-the Auth service, the Trade Executor, the poller, the pipeline and your extension
-all stay on Docker Compose, on your machines, exactly as they are. Deploying them
-is out of scope for this programme and it is not what the criteria ask for. Read
-the section on verification before you decide that sounds easier than it is.
+the Auth service, the Trade Executor and the analytics pipeline all stay on
+Docker Compose, on your machines, exactly as they are. The Trade REST API also
+hosts your Sprint 10 extension and the domain package, and the Trade Executor
+also runs the market-data poller. Deploying any of it is out of scope for this
+programme and it is not what the criteria ask for. Read the section on
+verification before you decide that sounds easier than it is.
 
 ## What changes when the front end leaves localhost
 
@@ -137,7 +139,7 @@ by running it twice and loading the site in between, not by reasoning about it.
 
 The entry point is a shell script you run locally. A team that splits it across
 more than one file should keep one script that calls the others, so that the
-stages cannot drift apart. Declare its path in `manifest.env`.
+stages cannot drift apart.
 
 ## IAM scoping
 
@@ -176,10 +178,10 @@ Two rules on the credentials themselves, and neither is negotiable.
 
 **No long-lived key goes into the repository, ever, in any branch.** Not in a
 config file, not in a `.env` that slipped past `.gitignore`, not in a comment, not
-in a screenshot pasted into a document, not in a test fixture. The harness
-searches your working tree for the shape of an access key, and it also searches
-the history of this sprint's files, because a key that was committed and then
-deleted is still a disclosed key and still fails the review.
+in a screenshot pasted into a document, not in a test fixture. Search your
+working tree for the shape of an access key, and search the history of this
+sprint's files too, because a key that was committed and then deleted is still a
+disclosed key and still fails the review.
 
 **Store the pair where the thing that needs it can read it and nobody else can.**
 Configure a named AWS CLI profile rather than exporting keys into your shell
@@ -279,50 +281,12 @@ useful.
 README.md                 this brief
 showcase/CHECKLIST.md     the panel-facing plan, filled in and committed
 iam/policy-skeleton.json  the shape of the deploy policy, ARNs as placeholders
-manifest.env              the names the harness reads
-scripts/check.sh          the acceptance harness
 ```
 
 Your deployment entry point does not live here. A script belongs at a sensible
-path in the repository, and `deploy/deploy-ui.sh` is a reasonable one. Name its
-path in `manifest.env` so the harness can find it.
-
-## The harness
-
-`scripts/check.sh` runs in two modes.
-
-```bash
-scripts/check.sh
-scripts/check.sh --live
-```
-
-Static mode reads `manifest.env`, checks the shape of your declared bucket name
-and CloudFront domain, confirms your deployment entry point exists at the path
-you declared and covers the build, upload and invalidate stages, and searches the
-repository for anything shaped like an AWS access key.
-
-Live mode needs the deployment to exist and needs network access. It fetches your
-CloudFront domain over HTTPS and confirms the answer is your Angular application
-rather than an error page, probes your bucket's own endpoints and confirms they
-refuse, then fetches the JavaScript bundles the deployed page references and runs
-the Sprint 9 secret patterns over them.
-
-Two things about this harness are worth saying plainly.
-
-It is lighter than every harness before it. Most of what this sprint is assessed
-on happens in an AWS account the harness has no credentials for and in a room it
-is not in. It cannot see your origin access control, it cannot see your IAM
-policy, it cannot see whether a human approved the deploy, and it cannot watch
-your showcase.
-
-It depends on the network, so it can fail for reasons that are nothing to do with
-you. A distribution that has just been created takes minutes to reach `Deployed`
-and answers oddly until it does. An invalidation in flight can serve you the
-previous build. A failure in live mode is worth a second run before it is worth
-an hour of debugging.
-
-Every skip names itself and says what would make it run. A skip is honest. A
-green run against something that was not there is not.
+path in the repository, and `deploy/deploy-ui.sh` is a reasonable one. Say where
+you put it in `showcase/CHECKLIST.md`, so that nobody hunts for it on the
+morning.
 
 ## Acceptance criteria
 
@@ -342,12 +306,13 @@ These are the criteria your instructor assesses against.
 
 ## What a person assesses
 
-Say it plainly, because the harness is short enough to be mistaken for the
-assessment. The harness can tell you that a URL answered, that a bucket refused,
-that a file exists and mentions three stages, and that no key-shaped string is in
-your tree.
+Every criterion this week is read or demonstrated. Most of what the sprint is
+assessed on happens in an AWS account nobody else holds credentials for, and in a
+room, so there is nothing countable to hide behind.
 
-Everything the criteria turn on is read by a person. Whether the bucket is
+A URL that answers, a bucket that refuses and a script that mentions three stages
+are the floor. Everything the criteria turn on is read by a person. Whether the
+bucket is
 private because of an origin access control or because you have not yet made it
 public. Whether the deploy policy is scoped to your two resources or to `*`.
 Whether the deployment is one command or a runbook that one member of the team
@@ -355,5 +320,9 @@ can execute. Whether a second run leaves it working. Whether the authenticated
 flow ran from the deployed URL or from a development server with the deployed URL
 open in another tab. Whether you can explain the choices behind any of it.
 
-Then the panel asks you about the twelve weeks, and that part has no harness at
-all.
+Search your own tree for anything shaped like an AWS access key before the
+review, and fetch the JavaScript bundles the deployed page references and run the
+Sprint 9 secret patterns over them. The bundle CloudFront serves is the bundle
+every visitor gets.
+
+Then the panel asks you about the twelve weeks.

@@ -22,7 +22,7 @@ demonstration failed for a previous cohort.
 
 | Check | Done by | Status |
 |---|---|---|
-| Stack up: Postgres, Kafka, Trade REST API, Auth service, Trade Executor, poller, extension | TODO | TODO |
+| Stack up: Postgres, Kafka, Trade REST API (hosts the extension), Auth service, Trade Executor (runs the poller) | TODO | TODO |
 | The deployed URL loads, in a private window, on a machine that is not the one that deployed it | TODO | TODO |
 | Sign-in works from the deployed URL with the demo user | TODO | TODO |
 | Fauxnance quota checked, with headroom for the demonstration | TODO | TODO |

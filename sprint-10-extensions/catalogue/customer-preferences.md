@@ -10,17 +10,17 @@ customer actually set. This extension is the single place that owns it.
 ## Who uses it
 
 The customer, through a settings screen in the Angular application. And other
-services, which call it to resolve a preference before they act: notifications
-asks it which channel to send on, a portfolio or watchlist screen asks it which
-currency to render totals in.
+parts of the platform, which resolve a preference before they act: a
+notification path asks which channel to send on, a portfolio or watchlist screen
+asks which currency to render totals in.
 
 ## What it integrates with
 
-| Surface | How this service uses it |
+| Surface | How this module uses it |
 |---|---|
-| Kafka | Nothing. This service consumes no topic and produces none. |
+| Kafka | Nothing by default. This module consumes no topic and produces none unless you decide it should. |
 | Angular application | The settings screen: reading the preference set and writing changes. |
-| Customer notifications | Calls this service to resolve a channel before sending. |
+| Customer notifications | Resolves a channel through this module before sending, across a package boundary rather than over HTTP. |
 | Trade REST API | Read-only, to resolve an account when a screen needs the holder's details. Do not copy anything `accounts` already owns. |
 
 ## The API is yours
@@ -28,27 +28,34 @@ currency to render totals in.
 There is no contract for this extension. Design the API, write it as OpenAPI
 before you write the controller, and bring it to your instructor on day one for
 review. The platform conventions still bind: the `{errorCode, message}` envelope,
-the platform error catalogue extended only where nothing in it fits, and a bearer
-token verified by this service itself.
+the platform error catalogue extended only where nothing in it fits, and the
+bearer token the Trade REST API verifies before any of your routes run. What the
+verifier cannot decide for you is whether this caller may reach this resource,
+so every route you add compares the `accountId` claim against what it is about
+to return.
 
 Note the integration requirement for the sprint when you scope this one: the
-service has to integrate with Kafka or the Trade REST API. A preferences service
-that talks to neither meets its own brief and not the sprint's, so agree the
-integration surface with your instructor on day one. Publishing a
-preference-changed event, or resolving account details through the Trade REST
-API, are two answers.
+extension has to integrate with the platform through Kafka or the trading data.
+A preferences module that touches neither meets its own brief and not the
+sprint's, so agree the integration surface with your instructor on day one.
+Publishing a preference-changed event, or resolving account details through the
+account path this service already has, are two answers.
 
 ## What makes it worth building
 
-Availability, not feature surface. Another service calls this one synchronously,
-on a path that decides whether a customer gets told about their own trade. That
-inverts the usual priority: a small API that is always there is worth more than a
-large one that is occasionally not. Timeouts, a sensible default when this
-service is unreachable, and a decision about whether the caller fails open or
-fails closed are the interesting parts, and every one of them is a decision log
-entry.
+Availability, not feature surface. Something else calls this on a path that
+decides whether a customer gets told about their own trade. That inverts the
+usual priority: a small interface that is always there is worth more than a
+large one that is occasionally not. What that call looks like, what the caller
+does when there is no preference to read, and whether it fails open or fails
+closed are the interesting parts, and every one of them is a decision log entry.
 
-The second question is what this service should hold at all. An email address and
+The call is in-process this year, which removes the timeout and adds a subtler
+risk: a caller that reaches into your tables directly because it can. Publish
+one interface for resolution, keep everything behind it, and say in the review
+who calls it.
+
+The second question is what this module should hold at all. An email address and
 a telephone number are personal data, and they may already exist somewhere else
 on the platform. Storing a second copy doubles the number of places a leak can
 happen and creates a reconciliation problem the day one of them changes. Deciding
@@ -73,10 +80,10 @@ have to ask.
   the path on every route.
 - **Personal data.** Decide what is stored here, encrypt or reference what is
   sensitive, and keep contact details out of logs and out of Kafka payloads.
-- **The internal route is not the customer route.** A resolution route that other
-  services call should not be reachable by a customer with a customer's token
-  under the same rules. Separate the path or use a service credential, and say
-  which you chose.
+- **The internal path is not the customer route.** What another part of the
+  service calls to resolve a channel is a Java interface, not an HTTP route
+  reachable by anyone holding a customer token. Keep resolution off the wire, or
+  say why it has to be on it.
 - **A default is a decision.** What the platform does when no preference has been
-  set, and what a caller does when this service does not answer, are both
-  behaviours somebody has to choose deliberately.
+  set, and what a caller does when nothing has been stored, are both behaviours
+  somebody has to choose deliberately.

@@ -67,6 +67,17 @@ executor:
   topics:
     orders: ${ORDERS_TOPIC:orders}
     trade-events: ${TRADE_EVENTS_TOPIC:trade-events}
+    market-data: ${MARKET_DATA_TOPIC:market-data}
+
+  # poller:
+  #   The market-data poller runs inside this service, on a schedule. What it
+  #   needs from configuration is the interval between cycles, the symbols the
+  #   platform holds and watches, and the share of the daily quota it may
+  #   spend. The symbol list is configuration and not a constant in the source:
+  #   a team that writes it into the code rebuilds an image to watch a
+  #   different instrument. Enforce the floor on the interval in code as well
+  #   as recording it here, because below roughly fifteen seconds no
+  #   configuration of the poller survives even a half-day session.
 
   # retry:
   #   How many attempts a message gets before it goes to orders.DLT, and the
@@ -91,8 +102,9 @@ fauxnance:
   # committed.
   api-key: ${FAUXNANCE_API_KEY}
   # timeout, retries, and how long a quote may be reused before it is fetched
-  # again. The quota is 2000 requests per day and this service shares it with
-  # the poller.
+  # again. The quota is 2000 requests per day for the whole key, and both the
+  # fill path and the poller spend it. Divide it deliberately: a poller that
+  # takes the lot leaves every order rejected for want of a price.
 
 # management:
 #   The container health check needs one endpoint. Expose that one.

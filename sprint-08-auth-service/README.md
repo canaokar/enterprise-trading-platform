@@ -34,10 +34,9 @@ sprint retires it.
 | A multi-stage `Dockerfile` | this folder, written by you |
 | Your service in the root `docker-compose.yml`, with the stub removed | repository root |
 | The OWASP review, filled in | `security-review/` |
-| The manifest telling the check harness your names | `manifest.env` |
 
 The scaffold gives you the Node build, the TypeScript configuration, the
-dependency set, the module directories and the harness. Every class, provider,
+dependency set and the module directories. Every class, provider,
 guard, DTO and test is yours to write. There are no stubs to fill in.
 
 ## The contract is the specification
@@ -91,10 +90,9 @@ payload is an email address published to every holder of the token, because the
 payload is base64 and not encryption: paste one into any decoder and read it.
 A `passwordChangedAt` claim is a fact about a credential handed to whoever
 intercepts the request. A `permissions` array duplicating `roles` is a second
-source of truth that will disagree with the first. The harness reads a decoded
-access token and fails on any claim outside the set above, and the reason it
-does is that removing a claim after Sprint 9 has generated a client from it is
-not a configuration change.
+source of truth that will disagree with the first. Any claim outside the set
+above is a finding, because removing a claim after Sprint 9 has generated a
+client from it is not a configuration change.
 
 Signing is HS256 with the secret in `JWT_SECRET`, the same value the Trade REST
 API verifies with. RS256 with a published public key is a documented upgrade
@@ -124,9 +122,9 @@ in a stack trace, a `console.log` left in during a bad afternoon. Two habits
 make it structural rather than hopeful. Log through one logger that redacts by
 key name at any depth, so a nested object cannot smuggle a field past you. Never
 pass a whole request body to a log call, and pass the fields you actually want
-instead. The harness reads your sources for a log call that mentions a
-credential field, which catches the direct case and none of the indirect ones.
-The indirect ones are what the review asks about.
+instead. Searching your sources for a log call that names a credential field
+catches the direct case and none of the indirect ones, and the indirect ones are
+what the review asks about.
 
 ## Refresh rotation
 
@@ -188,20 +186,18 @@ request, so two paths that both perform one verification land within noise of
 each other. The same trick with SHA-256 leaves both paths so fast that the
 database lookup is the measurable difference.
 
-The harness times both paths and reports the delta, then applies two tests. The
-absolute threshold is deliberately generous, because a laptop under load, a
-container that has just been scheduled and a cold connection pool all move a
-response by tens of milliseconds. The second test is on the shape rather than
-the size: one path taking twice as long as the other is an early return even
-when both numbers are small, which is what happens on hardware fast enough to
-run a whole argon2 verification inside the generous threshold. Passing both is
-not proof of constant time. Failing either is proof of an early return.
+Be ready to demonstrate it. Run both paths repeatedly in front of your
+instructor and compare the elapsed times. Judge the shape rather than the size:
+a generous absolute threshold is fair, because a laptop under load, a container
+that has just been scheduled and a cold connection pool all move a response by
+tens of milliseconds, but one path taking twice as long as the other is an early
+return even when both numbers are small. Comparable timing is not proof of
+constant time. A consistent gap is proof of an early return.
 
-Throttling the login route collides with that probe, because the probe is a
-burst of failed logins from one address, and a throttled request is refused
-before either path does any work. Build the throttle anyway, and tell the
-harness about it with `THROTTLE_COOLDOWN_SECONDS` and
-`UNIFORM_TIMING_ATTEMPTS` in `manifest.env`. Throttling is not a substitute for
+Throttling the login route collides with that demonstration, because a burst of
+failed logins from one address is what a throttle refuses before either path
+does any work. Build the throttle anyway, and know its cooldown window so that
+the timing comparison can be run outside it. Throttling is not a substitute for
 the uniform failure: it limits how fast an attacker can use an oracle you left
 open, rather than closing it.
 
@@ -241,9 +237,8 @@ its own README, which means anyone who has read this repository can mint a token
 that your service's consumers will accept, for as long as that secret is the one
 in use. Keeping it is a legitimate choice for a training stack and it is the
 configuration the contract describes. Rotating it once the stub is gone is the
-better habit. Whichever you choose, declare it in `manifest.env` under
-`STUB_SECRET_EXPECTATION`, because the harness asserts the decision you declared
-rather than assuming one.
+better habit. Whichever you choose, record it in your security review as a
+decision with its reason, rather than leaving it as something nobody discussed.
 
 ## Tests
 
@@ -264,14 +259,10 @@ expiry check at all, because the signature check catches it first. Build the
 expired case by signing a genuine token with a past `exp`, and the wrong
 signature case by signing a genuine, unexpired token with a different key.
 
-The harness locates those two cases by running your suite and reading the test
-names, using the patterns declared in `manifest.env`. The defaults match names
-containing `expired` and names containing `signature`, `forged` or `tampered`,
-in any spec whose path names the guard or the tokens it verifies. That second
-part is deliberate: a guard that hands the token to a token service and tests
-the two cases where the verifying happens is a defensible design, and the
-harness has no business ruling it out. Name your tests however you like and
-correct the patterns if your names do not match. Beyond the guard, expect to be
+Name both tests for what they assert, so that a reader finds them without
+opening the guard. Which spec file they live in is your design's business: a
+guard that hands the token to a token service, and tests the two cases where the
+verifying actually happens, is a defensible shape. Beyond the guard, expect to be
 asked at the review for tests covering the
 identical failure for an unknown user and a wrong password, rotation and replay,
 and the fact that a plaintext password never reaches your repository.
@@ -283,18 +274,19 @@ by hand beside the code drifts from the code within a fortnight, and the
 document that matters is the one describing what is deployed, so generate it
 from the decorators on your controller and DTOs and serve it from the process.
 
-Two paths, both declared in `manifest.env`: the human page, `/docs` by default,
-and the JSON document, `/docs/json` by default. The harness fetches the JSON,
-confirms it is an OpenAPI document and confirms it describes the four routes.
-The generated document is not a replacement for `contracts/auth-api.yaml`, which
-remains the source of truth binding both implementations. It is the evidence
-that your code still matches it.
+Two paths: the human page, `/docs`, and the JSON document, `/docs/json`. Serve
+them elsewhere if your design says so, and say where at the review. What is
+assessed is that the JSON is a valid OpenAPI document served by the running
+process and that it describes all four routes. The generated document is not a
+replacement for `contracts/auth-api.yaml`, which remains the source of truth
+binding both implementations. It is the evidence that your code still matches
+it.
 
 ## The security review
 
 The deliverable is a committed file, not a conversation at the review. Copy
-`security-review/TEMPLATE.md` to a file of your own in the same folder, named in
-`manifest.env`, and fill it in as you build rather than the night before.
+`security-review/TEMPLATE.md` to a file of your own in the same folder, and fill
+it in as you build rather than the night before.
 
 The categories in the template are the OWASP Top Ten items that bear on an
 authentication service. A01 broken access control, because `/auth/me` must read
@@ -315,9 +307,9 @@ written. A finding of "none" is allowed and requires a sentence of justification
 naming what you checked, because "none" with nothing beside it is
 indistinguishable from a category nobody looked at. A disposition of "accepted"
 is also allowed, and requires the same: say what the residual risk is and why
-the team is carrying it. The harness checks that every category has both cells
-filled and that a finding of none carries a sentence. Whether the sentence is
-true is read by your instructor.
+the team is carrying it. Every category carries both cells, and a finding of
+none carries its sentence. Whether the sentence is true is read by your
+instructor.
 
 ## The toolchain
 
@@ -329,9 +321,6 @@ npm install                  # first run, and whenever you add a dependency
 npm run build                # tsc through the Nest CLI
 npm test                     # the Jest suite
 npm run start:dev            # run against the compose stack
-
-scripts/check.sh             # the acceptance harness
-scripts/check.sh --live      # and the probes against your running stack
 ```
 
 Commit `package-lock.json`. A build that resolves a different dependency tree on
@@ -349,14 +338,11 @@ nest-cli.json         the Nest CLI build configuration
 src/                  one directory per module, each with a README saying what belongs in it
 test/                 for suites that do not sit beside a source file
 security-review/      the OWASP review template
-scripts/check.sh      the acceptance harness
-manifest.env          the names the harness reads
 ```
 
 `src/` ships as empty directories. Each carries a README stating the single
 responsibility of that module and the dependency direction it has to respect.
-Reorganise them if your design says something else, and tell the harness what
-you chose in `manifest.env`.
+Reorganise them if your design says something else.
 
 `.env.example` lists every variable the service reads. `JWT_SECRET` ships empty
 on purpose: it is read from the environment, it is shared with the Trade REST
@@ -399,55 +385,13 @@ These are the criteria your instructor assesses against.
 9. The security review against the auth-related OWASP items is committed, with
    a finding and a disposition for every category.
 
-## The check harness
+## The review
 
-`scripts/check.sh` asserts the things a machine can assert. Two modes.
+Your instructor assesses this sprint by reading the code against the criteria
+above and by exercising the running service. A green suite and a complete
+template are the floor, and neither can see intent.
 
-**Static mode** is the default. No container, no database, no running service.
-
-```bash
-scripts/check.sh
-```
-
-| Check | What it proves |
-|---|---|
-| `npm ci` installs from the lock file | A teammate gets the tree you tested, rather than whatever resolves the day they clone it |
-| `npm run build` succeeds from a clean state | The service compiles from the files in the repository |
-| The Jest suite runs and is green | Criterion 7, the existence half |
-| A spec covering the guard ran, with a passing test for the expired-token path and one for the wrong-signature path | Criterion 7 |
-| No log call in `src/` names a credential field | Criterion 4, the never-logged half, in its direct form |
-| The security review exists, differs from the template, and every category carries a finding and a disposition | Criterion 9 |
-
-**Live mode** adds the probes. It needs your stack up: your service running
-against its store, and your Sprint 6 service running and pointed at it.
-
-```bash
-scripts/check.sh --live
-```
-
-| Probe | What it proves |
-|---|---|
-| Register, login, refresh and `/auth/me` against the contract | Criterion 1 |
-| A decoded access token, claim by claim | Criterion 2 |
-| A wrong password and an unknown user, compared on status, body and elapsed time | Criterion 6 |
-| One refresh, then the old refresh token, then the new one | Criterion 5 |
-| The stored password hash, where your manifest tells the harness how to read it | Criterion 4, the algorithm half |
-| A protected Trade REST API route with a token from this service, and with a token signed by a key it should not trust | Criterion 3, behaviourally |
-| The OpenAPI document, fetched from the running service | Criterion 8 |
-
-Criterion 3 is reviewed with `git diff` at the design review rather than by the
-harness, which prints the command. A harness cannot tell a configuration change
-from a code change that happens to look like one.
-
-The harness reads your ports, your paths, your test-name patterns, your demo
-credentials and your store from `manifest.env`, so it asserts your design rather
-than dictating one.
-
-### What passing does not mean
-
-The harness reads structure and behaviour at the edges. It cannot see intent.
-
-Assessed by a human at the review, and not by this script:
+Read or demonstrated, never counted:
 
 - whether a password can reach a log by an indirect route: an error object
   serialised whole, a request body passed to a log call, a stack trace
@@ -455,13 +399,18 @@ Assessed by a human at the review, and not by this script:
 - whether the replay of a consumed refresh token revokes the whole chain, or
   merely refuses the one token
 - whether the uniform failure holds because both paths do the same work, or
-  because the machine was quiet when the harness ran
+  because the machine happened to be quiet
 - whether the security review is a reading of your service or a reading of the
   template
 - whether the guard runs before every route that needs it, including the one
   added last
 
-Bring to the review: the running stack with the stub removed, one token decoded
-in front of the panel, your refresh rotation traced through your store, the
-`git diff` showing no Java changed, and your answer to what you would do at
-09:00 on the morning somebody reports a stolen refresh token.
+Bring to the review: the running stack with the stub removed, all four
+endpoints exercised against the contract, one token decoded in front of the
+panel claim by claim, a wrong password and an unknown user compared on status,
+body and elapsed time, your refresh rotation traced through your store with the
+consumed token refused afterwards, the stored password hash, the OpenAPI
+document fetched from the running process, a protected Trade REST API route
+answering a token from this service and refusing one signed with a key it should
+not trust, the `git diff` showing no Java changed, and your answer to what you
+would do at 09:00 on the morning somebody reports a stolen refresh token.

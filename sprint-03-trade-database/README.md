@@ -134,36 +134,32 @@ apply them consistently.
 |---|---|
 | Numbered migration files creating the schema | `migrations/` |
 | Seed data covering the states named below | `seed/` |
+| One command that takes an empty database to migrated and seeded | wherever you put it, with its name recorded in `design/` |
 | An ER diagram every member of the team can walk | `design/er-diagram.md` or an exported image |
 | Index justifications, one named query per index | `design/indexes.md` |
 | A short data dictionary and your normalisation notes | `design/` |
-| The manifest that tells the check harness your names | `manifest.env` |
-| Two probe statements for the harness | `probes/` |
 
-Create `design/` yourself. The harness checks that the diagram and the index
-justifications exist, because a design with no written rationale cannot be
+Create `design/` yourself. The diagram and the index justifications are read in
+the design review, because a design with no written rationale cannot be
 reviewed.
 
 ## How you work
 
 Schema changes are migrations, not edits. Put each one in `migrations/` as a
 `.sql` file numbered from `001_`, and apply the whole directory in filename
-order with the provided script:
+order.
 
-```bash
-sprint-03-trade-database/scripts/apply.sh
-```
+Write the command that does that. It applies every migration in filename order,
+then everything in `seed/`, against the Postgres container from the root
+`docker-compose.yml`. A shell script in a `scripts/` folder you create, a
+Makefile target or a `psql` invocation you can paste are all acceptable, as long
+as one command does the whole job and every member of the team can run it. Give
+it a way to drop the database and rebuild it from the files. Start the
+infrastructure first with `docker compose up -d`, and record what you wrote in
+`design/` so that the review does not start with somebody remembering the
+syntax.
 
-That applies every migration, then everything in `seed/`, against the Postgres
-container from the root `docker-compose.yml`. Start the infrastructure first
-with `docker compose up -d`. To wipe the database and rebuild it from the
-files:
-
-```bash
-sprint-03-trade-database/scripts/apply.sh --fresh
-```
-
-Run that often. A schema that only works because of something a teammate typed
+Run it often. A schema that only works because of something a teammate typed
 into psql on Tuesday is a schema that will not survive the showcase.
 
 Until your first design review, editing a migration in place is fine: you are
@@ -249,7 +245,8 @@ These are the criteria your instructor assesses against.
 2. The schema is version controlled as migration files, applied in a stable
    order, and the database can be rebuilt from those files alone.
 3. Foreign keys and check constraints are present and enforce the domain
-   rules, including a unique constraint on the order idempotency key.
+   rules, including a unique constraint on the order idempotency key and at
+   least three check constraints, one of them covering account state.
 4. At least three indexes exist and each is justified by one of the named
    queries.
 5. Seed data loads with one command and covers active, suspended and closed
@@ -258,7 +255,15 @@ These are the criteria your instructor assesses against.
    path documented.
 7. An ER diagram is committed, and every team member can walk it unaided.
 
-One further criterion has no automated check and is worth more than the rest.
+Two of those constraints have to be demonstrated rather than described. Write a
+statement that inserts the same order twice under one idempotency key and is
+refused by the database with SQLSTATE `23505`, unique violation. Write a second
+that inserts a row referencing a parent that does not exist and is refused with
+SQLSTATE `23503`, foreign key violation. Run both against your seeded database
+in front of your instructor. Reading the constraint out of a migration file is
+not the same as watching the database refuse the row.
+
+One further criterion is worth more than the rest.
 The model has to be the one the platform needs, not one that fits only this
 week. From Sprint 5 your Java entities are built against it, in Sprint 6 your
 mappers are written against it, and in Sprint 7 two services write to it
@@ -267,78 +272,18 @@ contract the Sprint 6 service satisfies out of this database, and a schema
 that cannot serve it is the wrong schema. Reading it is research, not
 shortcutting.
 
-## The check harness
+## The design review
 
-`scripts/check.sh` asserts the things a machine can assert. Run it as often as
-you like.
+Satisfying every countable criterion above is necessary and it is not
+sufficient. Nothing mechanical can tell you whether your schema is in third
+normal form, whether an index is justified or merely present, whether your
+historical structures are the right shape, or whether your team can explain any
+of it. Your instructor assesses that by reading the schema and the design notes
+against the criteria, and the review is the assessment. A team can tick every
+box with a model that is quietly wrong in a way that costs them a fortnight in
+Sprint 7.
 
-```bash
-sprint-03-trade-database/scripts/check.sh
-```
-
-It creates a scratch database inside the same Postgres container, named
-`trading_check` by default, applies every migration and every seed file to
-that empty database, runs its assertions, and drops the scratch database when
-they all pass. Your working `trading` database is never touched. When a check
-fails the scratch database is left in place so you can look at it:
-
-```bash
-docker compose exec postgres psql -U postgres -d trading_check
-```
-
-Set `CHECK_DATABASE` in the environment to use a different name, and pass
-`--keep` to hold the scratch database open after a run that passed.
-
-What it asserts:
-
-| Check | What it proves |
-|---|---|
-| `migrations/` holds numbered `.sql` files | The schema is version controlled |
-| Every migration applies to an empty database, in order, without error | The database can be rebuilt from the files alone |
-| Seed files apply after the migrations with one command | Criterion 5, first half |
-| Accounts exist in all three states after seeding | Criterion 5, second half |
-| A unique constraint covers the declared idempotency column | The constraint exists |
-| A duplicate insert of that key is rejected by the database | The constraint is the enforcement, not application code |
-| At least two foreign keys exist | The entities are related, not four flat tables |
-| An insert referencing a parent that does not exist is rejected | The foreign keys are enforced |
-| At least three check constraints exist, one covering account state | Domain rules live in the schema |
-| At least three indexes exist that are not primary keys or constraint indexes | Criterion 4, the countable half |
-| `design/` holds an ER diagram and an index justification file | Criteria 4 and 7, the reviewable half |
-
-### How the harness avoids dictating your design
-
-The harness cannot check a schema it has not seen without either guessing your
-names or dictating them. So it asks. `manifest.env` in this folder is where
-you declare the handful of names the harness needs: the accounts table, its
-state column and the three literal values it stores, the orders table and the
-column carrying the idempotency key. Fill it in once your first migration
-exists. The harness reads it and adapts. It never asserts a name it was not
-given, and it has no opinion about the rest of your schema.
-
-Two assertions cannot be made from names alone, because only you know the
-columns your tables require. Write them yourself, as SQL, in `probes/`:
-
-- `probes/duplicate-idempotency-key.sql` inserts one valid order twice with
-  the same idempotency key. The harness expects the second insert to fail with
-  SQLSTATE `23505`, unique violation.
-- `probes/orphan-foreign-key.sql` inserts one row that references a parent
-  that does not exist. The harness expects SQLSTATE `23503`, foreign key
-  violation.
-
-Both run inside a transaction that is rolled back, so they leave nothing
-behind, and both run after the seed data has loaded, so they can reference
-seeded rows. Each file explains what to write in its own comments.
-
-### What passing does not mean
-
-Passing the harness is necessary and it is not sufficient. It cannot tell you
-whether your schema is in third normal form, whether an index is justified or
-merely present, whether your historical structures are the right shape, or
-whether your team can explain any of it. Those are assessed by your instructor
-in the design review, and the review is the assessment. A team can
-pass every check here with a model that is quietly wrong in a way that costs
-them a fortnight in Sprint 7.
-
-Bring to the review: the ER diagram, your migrations, the seven queries with
-their plans, your index justifications, and the answer to "why is it this way
-and not the other way" for the three decisions you argued about the longest.
+Bring to the review: the ER diagram, your migrations, your apply command, the
+seven queries with their plans, your index justifications, the two rejection
+statements above, and the answer to "why is it this way and not the other way"
+for the three decisions you argued about the longest.

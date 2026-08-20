@@ -30,19 +30,6 @@
   <properties>
     <java.version>21</java.version>
 
-    <!--
-      The coordinates of your Sprint 5 domain module. There is no aggregator build: this service
-      resolves that module from your local Maven repository, so `mvn install` in
-      sprint-05-domain-engine has to happen before `mvn verify` here, and again whenever the domain
-      changes.
-
-      These three values are the defaults the Sprint 5 scaffold declares. If your team changed them
-      there, change them here and in manifest.env, and keep all three files in agreement.
-    -->
-    <domain.groupId>com.tradingplatform</domain.groupId>
-    <domain.artifactId>trading-engine</domain.artifactId>
-    <domain.version>1.0.0</domain.version>
-
     <mybatis.version>3.0.5</mybatis.version>
     <springdoc.version>2.8.17</springdoc.version>
     <jjwt.version>0.12.7</jjwt.version>
@@ -50,12 +37,13 @@
 
   <dependencies>
 
-    <!-- The Sprint 5 domain engine: entities, enumerations, the DTO, the exceptions and the rules. -->
-    <dependency>
-      <groupId>${domain.groupId}</groupId>
-      <artifactId>${domain.artifactId}</artifactId>
-      <version>${domain.version}</version>
-    </dependency>
+    <!--
+      There is no dependency on the Sprint 5 domain, because the domain is not a dependency. Its
+      sources are copied into src/main/java in this project and compiled by this build, which is
+      what lets a fresh checkout build the service with one command and nothing installed first.
+
+      The Bean Validation annotations the domain carries arrive with the validation starter below.
+    -->
 
     <!-- Spring MVC and an embedded server. -->
     <dependency>
@@ -65,7 +53,7 @@
 
     <!--
       Bean Validation, with an implementation. The constraints themselves travel with the DTO from
-      the domain module; this is what runs them at the edge.
+      the domain package; this is what runs them at the edge.
     -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

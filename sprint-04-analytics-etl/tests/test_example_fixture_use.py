@@ -8,8 +8,8 @@ evidence.
 
 Your real tests go in files named for what they cover, `test_transform.py` for
 the transform. At least one of them must feed the malformed fixture through
-your transform and assert what happens to each bad row. Declare that test in
-`manifest.env` so the check harness can run it.
+your transform and assert what happens to each bad row. Name that test for what
+it asserts, so it can be run and read on its own.
 """
 
 from __future__ import annotations

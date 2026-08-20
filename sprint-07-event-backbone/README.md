@@ -31,18 +31,19 @@ the message arrives twice, and a team that can prove it on demand.
 
 | Deliverable | Where it lives |
 |---|---|
-| Three topics, created with the keys and partition counts in the contract | `infra/kafka/create-topics.sh` runs them; you own the decisions |
+| The three topics and their three dead-letter topics, created with the names, partition counts and retention the contract fixes | the broker; the commands go in `scripts/create-topics.sh` |
+| The written justification of the partition counts and the key choices | `design/kafka.md`, which you create |
 | A small change to your Sprint 6 service: publish to `orders`, answer `NEW` | `sprint-06-trade-api/` |
 | The Trade Executor: consume, price, fill or reject, settle, publish | `executor/` |
-| The market-data poller: batched quotes onto `market-data` | `poller/` |
+| The market-data poller, scheduled inside the executor: batched quotes onto `market-data` | `executor/`, in its own package |
 | The batch pipeline loading `FACT_TRADES`, with dead-letter handling | `etl-starter/`, refactored |
 | Characterisation tests around the starter, committed before you change it | `etl-starter/tests/` |
-| A SonarQube gate passing on the Java services and the pipeline | your local SonarQube |
-| The manifest telling the check harness your names | `manifest.env` |
+| A SonarQube gate passing on the executor and the pipeline | your local SonarQube |
 
-The scaffolds give you the Maven build, the package tree, the Python project
-layout, the harness, and one loader that already works. Every class in the
-executor and every function in the poller is yours to write.
+The scaffolds give you the Maven build, the executor's package tree, the
+pipeline's project layout, and one loader that already works.
+`scripts/create-topics.sh` is an empty file at a named path. Every class in the
+executor, the poller's included, is yours to write.
 
 ## The three topics
 
@@ -74,17 +75,90 @@ point onwards. Three on `orders` lets three executor instances share the work
 and shows that a consumer group cannot usefully exceed the partition count. Six
 on `market-data` reflects its higher rate.
 
-The topics are created explicitly by `infra/kafka/create-topics.sh`, which the
-compose file runs once the broker is healthy. Auto-creation is switched off,
-because it produces a one-partition topic with the wrong retention and nothing
-tells you it happened. The same script creates the three dead-letter topics,
-named `<topic>.DLT` per the contract.
-
 Serialisation is JSON. Every message carries the same five-field envelope plus
 a payload, on all three topics, so that one deserialiser and one dead-letter
 handler cover the platform. Consumers ignore fields they do not recognise:
 adding an optional field is not a breaking change, and a consumer that fails on
 an unknown field turns an additive change into an outage.
+
+### Creating them
+
+The broker starts empty. Nothing in `docker-compose.yml` creates a topic, and
+nothing above the broker process is provided. Running a single-node broker
+teaches configuration rather than architecture, so the container is given to
+you. Everything above that line is the deliverable: the topics, the partition
+counts and keys with the reasoning behind them, and the producer and consumer
+settings in the three services that use them.
+
+Create the topics first. Every other piece of work this sprint produces to or
+consumes from them, and a topic that does not exist is the first thing your
+Sprint 6 service will fail on.
+
+Auto-creation is switched off on the broker, in
+`KAFKA_AUTO_CREATE_TOPICS_ENABLE`, and it stays off. An auto-created topic
+arrives with one partition and the default retention, which is wrong for all
+three of these, and it arrives silently on first use. With auto-creation off, a
+producer writing to a topic nobody created gets an error. An error is something
+you can act on. A platform that is quietly wrong is not.
+
+A creation call carries six things, and each has exactly one source:
+
+| What the call carries | Where the value comes from |
+|---|---|
+| The bootstrap address | `localhost:9092` from your machine, `kafka:29092` from inside the compose network |
+| The topic name | The contract. A renamed topic breaks every consumer in the platform, including ones another team wrote |
+| The partition count | The contract's table, and the justification you write for it |
+| The replication factor | 1 locally, because there is one broker. A factor above the broker count is rejected |
+| The retention | The contract, expressed in milliseconds. None of 7 days, 30 days or 1 day is the broker default |
+| The cleanup policy | `delete` on all three. These are event streams, not keyed state to be compacted |
+
+The local operation section of `contracts/kafka-topics.md` shows the flags those
+map to. `kafka-topics.sh` ships inside the broker image, so the commands run in
+that container rather than on your machine:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 --list
+```
+
+Then the three dead-letter topics. The contract names the pattern `<topic>.DLT`
+and says nothing about their shape, because a dead-letter topic carries a small
+fraction of its source's volume. Their partition count and retention are your
+decision, and you are asked for the reasoning.
+
+Confirm the result rather than assuming it. `--describe` prints the partition
+count, the replication factor and every configuration you overrode:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 --describe --topic market-data
+```
+
+One partition where the contract says six is the signature of a topic that a
+producer created before anybody configured it. Partitions can never be
+decreased, so the repair is to delete the topic and create it again. That is
+cheap this week and expensive once a consumer group holds offsets on it.
+
+`scripts/create-topics.sh` is an empty file at a named path. Put the commands in
+it. Nothing forces you to. What is assessed is that the topics exist in the
+contracted shape and that you can say how they got there, so a team that typed
+the commands by hand and recorded them meets the criterion on the same terms.
+The reason to write the script anyway is that
+`docker compose down -v` removes the broker's volume and every topic on it, and
+you will run that more than once before Friday.
+
+### The justification
+
+Commit `design/kafka.md`. It covers why `orders` and `trade-events` carry three
+partitions and `market-data` six, why each topic is keyed the way it is, what
+you chose for the dead-letter topics, and what breaks under the alternatives you
+rejected.
+
+The contract already states the reasoning, so repeating it back is not the
+deliverable. Applying it to your own platform is: how many executor instances
+you can usefully run at three partitions, what happens to per-account ordering
+if somebody raises the count in Sprint 10, and which of your consumers would
+notice. A team that cannot answer those has three numbers it copied.
 
 ## The change to your Sprint 6 service
 
@@ -219,10 +293,6 @@ where the executor recognised the duplicate and did nothing. Show also that no
 second message appeared on `trade-events`, because a consumer that believes the
 order happened twice is the same bug one service further downstream.
 
-`scripts/check.sh --live` runs exactly this probe. Being able to run the script
-is not the same as being able to give the demonstration, and the review asks
-for the demonstration.
-
 ### Failure handling
 
 Two classes of failure, handled differently, and telling them apart is the
@@ -263,11 +333,35 @@ batching the HTTP call is a quota optimisation and it is correct, but batching
 the Kafka message puts several symbols behind one key and destroys the
 per-symbol ordering the contract promises.
 
+### Where it lives
+
+Inside the Trade Executor, as a scheduled component in Java, in its own package
+under the executor's base package. Not a service of its own, not Python, and not
+a second container.
+
+The reason is the key. The executor already calls Fauxnance to price every fill.
+A separate poller means a second process holding the same credential, spending
+the same 2000 requests with no idea what the other one has spent, and an
+argument about which of the two owns the retry policy. One component calls
+Fauxnance, so one component holds the key and one component divides the budget.
+
+What follows from the placement is worth stating, because it is where teams go
+wrong. The poller runs on its own schedule and is not on the order path. It does
+not start a poll because an order arrived, and the consumer does not wait for a
+poll to finish. They share a quote client and nothing else. Sharing a process is
+not sharing a lifecycle: a scheduled method that throws is not necessarily
+rescheduled, and a poller that quietly stopped in a running container is harder
+to notice than one whose container exited.
+
+The executor scaffold ships the package with a `package-info.java` stating what
+belongs in it. Scheduling has to be switched on for it, and Fauxnance has to be
+asked for the batch endpoint rather than one symbol at a time.
+
 ### The quota arithmetic
 
 The batch endpoint takes at most 25 symbols and costs one request whatever the
 symbol count. The quota is 2000 requests per day per key, resetting at 00:00
-UTC, and the key is shared with the executor.
+UTC, and the poller shares it with every fill the executor prices.
 
 | Interval | Requests in 24 hours | How long 2000 requests last |
 |---|---|---|
@@ -285,13 +379,19 @@ The same data batched is 2880.
 
 Nothing at a 30 second interval survives being left running overnight. Thirty
 seconds is right for a taught day and costs about 960 requests over eight
-hours, which leaves the rest for pricing fills. Stop the container at the end
-of the session, or run at 60 seconds.
+hours, which leaves the rest for pricing fills. Stop the executor at the end of
+the session, or run at 60 seconds.
 
-The key is shared. A poller that spends the whole allowance leaves the executor
-with nothing, and the first symptom is orders rejected because no price could
-be obtained. Give the poller a budget that is its share rather than the whole
-quota.
+The key is shared inside one process now, which makes the arithmetic easier to
+get right and no less important. A poller that spends the whole allowance leaves
+the fill path with nothing, and the first symptom is orders rejected because no
+price could be obtained. Give the poller a budget that is its share rather than
+the whole quota, and give the two callers one place that counts what has been
+spent.
+
+The key is read from `FAUXNANCE_API_KEY` and appears nowhere in the repository,
+in this folder or any other. A key that reaches a commit has to be revoked, and
+the history keeps it whether or not you revoke it.
 
 Poll only the symbols you hold or watch. Enforce a floor on the interval in the
 code rather than documenting one and hoping. Check `GET /usage` before assuming
@@ -372,24 +472,23 @@ do it. When you decide a behaviour was wrong and you are changing it
 deliberately, change the test in the same commit and say so in the message.
 That is a different act from the tests silently going green again.
 
-### The rule the harness enforces, exactly
+### The rule on ordering, exactly
 
 The first commit that adds a test file under `etl-starter/tests/` has to be an
 ancestor of the first commit after the scaffold that touches
 `etl-starter/src/`.
 
 Tests and a change to the loader in the same commit do not satisfy it. Neither
-does a history where the loader was tidied first and pinned afterwards. Both
-are reported by name, with the commits, so there is no guessing about which
-commit the harness objected to.
+does a history where the loader was tidied first and pinned afterwards. Your
+instructor reads `git log` for those two commits, so make them easy to find.
 
 Commit in small pieces. A history of one commit per week cannot show this and
 cannot show anything else either.
 
 ## SonarQube
 
-The gate has to pass on the Java services and on the pipeline. Run it locally
-rather than reading about it.
+The gate has to pass on the executor and on the pipeline. Run it locally rather
+than reading about it.
 
 ```bash
 docker run -d --name sonarqube-<yourteam> -p 9000:9000 sonarqube:community
@@ -403,7 +502,7 @@ Open `http://localhost:9000`, sign in as `admin` with the password `admin`,
 change it when asked, create a project and generate a token. The token is a
 credential: export it, never commit it.
 
-Java, from either service folder:
+Java, from `executor/`:
 
 ```bash
 export SONAR_TOKEN=the-token-you-generated
@@ -434,10 +533,8 @@ critical issue, no new security hotspot left unreviewed, and duplication and
 coverage on new code inside the gate's thresholds. Passing by marking findings
 as "won't fix" is visible in the dashboard and is not passing.
 
-`scripts/check.sh` does not run SonarQube. Standing up a server, waiting for it
-and holding a token is not something a check script should do on your machine
-without asking. The gate is checked at the review, on your screen, on the
-project you scanned.
+Nothing runs SonarQube for you. The gate is checked at the review, on your
+screen, on the project you scanned.
 
 ## The toolchain
 
@@ -447,133 +544,84 @@ from `docker-compose.yml`.
 ```bash
 docker compose --profile platform up -d --build   # infrastructure and the stub
 
+sprint-07-event-backbone/scripts/create-topics.sh # the topics, once you have
+                                                  # written the commands
+
 cd sprint-07-event-backbone/executor
 mvn clean verify                                  # build and test the executor
 
 cd ..
 python3 -m venv .venv
-.venv/bin/python -m pip install -e 'poller[dev]' -e 'etl-starter[dev]'
-.venv/bin/python -m pytest poller etl-starter
-
-scripts/check.sh                                  # the acceptance harness
-scripts/check.sh --live                           # and the probes
+.venv/bin/python -m pip install -e 'etl-starter[dev]'
+.venv/bin/python -m pytest etl-starter
 ```
 
-Add the executor and the poller to `docker-compose.yml` under the `platform`
-profile, as you did with the Trade REST API in Sprint 6. Both need
-`KAFKA_BOOTSTRAP_SERVERS` pointing at `kafka:29092`, both need
-`FAUXNANCE_API_KEY` passed through from `.env`, and the executor needs the
-database variables and a `depends_on` for Postgres on its health condition.
-`localhost` inside a container is the container.
+That install has to work from an empty environment on a teammate's machine, not
+only on the laptop the code was written on.
+
+Add the executor to `docker-compose.yml` under the `platform` profile, as you
+did with the Trade REST API in Sprint 6. It needs `KAFKA_BOOTSTRAP_SERVERS`
+pointing at `kafka:29092`, `FAUXNANCE_API_KEY` and `POLL_INTERVAL_SECONDS`
+passed through from `.env`, the database variables, and a `depends_on` for
+Postgres on its health condition. `localhost` inside a container is the
+container. There is no separate poller service to add, and nothing in the
+compose file creates a topic: they are on the broker because you put them
+there.
 
 The executor's package tree ships as empty packages, each with a
-`package-info.java` stating what belongs in it. The poller's modules ship as
-docstrings saying the same thing. Rename or reorganise either if your design
-says something else, and tell the harness what you chose in `manifest.env`.
+`package-info.java` stating what belongs in it, including the one the poller
+goes in. Rename or reorganise them if your design says something else.
 
 ## Acceptance criteria
 
 These are the criteria your instructor assesses against.
 
-1. Three topics created, with documented keys and partition counts.
+1. The three topics and their dead-letter topics exist, created by the team,
+   with the contracted names, keys, partition counts and retention, and the
+   partition and key choices are justified in writing.
 2. The Trade REST API publishes to `orders` and returns `NEW`.
 3. The Trade Executor consumes, prices against a live Fauxnance quote, applies
    fill or reject rules, updates order, cash and position in one transaction,
    and publishes to `trade-events`.
 4. Replaying a duplicate message does not double-debit an account, and the team
    can demonstrate that.
-5. The poller batches up to 25 symbols per call and stays inside the daily
-   quota.
+5. The poller runs on a schedule inside the executor, batches up to 25 symbols
+   per call and stays inside the daily quota.
 6. Batch ETL loads `FACT_TRADES` with dead-letter handling for bad rows.
-7. SonarQube gate passing on the pipeline and the Java services.
+7. SonarQube gate passing on the pipeline and the executor.
 8. Characterisation tests written before any refactoring of the starter code.
 
-## The check harness
+## The review
 
-`scripts/check.sh` asserts the things a machine can assert. It has two modes.
+Your instructor assesses this sprint by reading the code against the criteria
+above and by watching the platform run. A green suite proves less here than
+anywhere else in the programme. A duplicate that moved no money once says
+nothing about whether the mechanism holds under load, and a row that was
+dead-lettered says nothing about whether the reason recorded with it is usable
+on Monday morning.
 
-**Static mode** is the default. It needs no container, no broker and no
-database, and it never calls the Fauxnance API.
+Read or demonstrated, never counted:
 
-```bash
-scripts/check.sh
-scripts/check.sh --reuse    # keep the scratch Python environment between runs
-```
-
-| Check | What it proves |
-|---|---|
-| `mvn clean verify` succeeds in `executor/` | The executor builds and its own tests pass |
-| The executor has tests at all | Criterion 3, the half a build can see |
-| The poller and the pipeline install into an empty environment | They are packages a teammate can install, not folders that work on one laptop |
-| The poller holds code rather than the scaffold's docstrings, and has tests | Criterion 5, the countable half |
-| The declared polling interval, with the request arithmetic it implies | Criterion 5, the arithmetic half, reported rather than judged |
-| Characterisation tests exist under the declared path and pass | Criterion 8, the existence half |
-| The first test commit is an ancestor of the first change to the starter | Criterion 8, the half that is the whole point |
-| No Fauxnance key literal anywhere in this folder | The key is not in the repository |
-
-**Live mode** adds the probes. It needs the whole stack: the broker with the
-topics, your schema and seed data, the auth stub, your Trade REST API, your
-executor and your poller.
-
-```bash
-scripts/check.sh --live
-```
-
-Live mode writes to your stack, which is why it is not the default. It places
-one order, produces one message back onto `orders`, and inserts one row into
-your `orders` table and removes it again. Both statements are in
-`manifest.env` and both are yours to correct if your schema spells anything
-differently.
-
-| Probe | What it proves |
-|---|---|
-| The three topics exist with the documented partition counts | Criterion 1 |
-| An order placed through your API answers `NEW` | Criterion 2 |
-| That order appears on `orders`, keyed by the account | Criterion 2, the publishing half |
-| It reaches a terminal status inside the timeout, and an event appears on `trade-events` | Criterion 3 |
-| The same message is delivered again and the balance does not move | Criterion 4 |
-| No second event for that order on `trade-events` | Criterion 4, one service downstream |
-| A quote arrives on `market-data` within one polling interval, and how many distinct symbols came with it | Criterion 5, as evidence |
-| `FACT_TRADES` grows after a load, and does not grow after a second load with no new data | Criterion 6, and idempotency |
-| A row the harness plants lands in the dead-letter path and not in the fact table | Criterion 6 |
-
-The harness reads your names, your topic names, your consumer group and the
-three commands that run your pipeline from `manifest.env`, so it asserts your
-design rather than dictating one. Where a design choice makes a probe
-inapplicable it says so and names the reason: a rejected probe order gives the
-replay nothing to move, a store it cannot count is a store it will not guess
-at, and a load that is not idempotent makes a row count useless for isolating
-one planted row.
-
-The batch size is the one criterion no static check can reach without
-dictating how you write the poller. Live mode covers what it can: quotes
-arriving inside one interval, one message per symbol, and how many distinct
-symbols turned up in a single cycle. Several symbols in one cycle is evidence
-of a batched call. The cap at 25 and the arithmetic are read at the review.
-
-### What passing does not mean
-
-The harness reads structure and behaviour at the edges. It confirms that the
-same message twice moved no money in one run, without knowing whether the
-mechanism that prevented it holds under load. It confirms that a row was
-dead-lettered, without reading the reason recorded with it. It runs your
-characterisation tests, it does not read them, and a test that asserts nothing
-passes here.
-
-Assessed by a human at the review, and not by this script:
-
+- the partition counts and the key choices, and whether the team can defend
+  them against the alternatives rather than recite the contract
+- how the topics came to exist, and why they are shaped the way they are
 - the fill rule, and what it does at the boundaries: an equal price, a stale
   quote, a market that is closed
 - whether the transaction encloses the three writes and nothing more
 - whether the retry and dead-letter split genuinely distinguishes a poison
   message from a transient failure
-- the quota arithmetic, and whether your interval and symbol list agree with it
+- the quota arithmetic, the cap of 25 symbols per call, and whether your
+  interval and symbol list agree with it
 - the SonarQube gate, on your screen, on the project you scanned
 - whether the characterisation tests pin behaviour worth pinning, and whether
   the refactoring left the loader better than it found it
 
-Bring to the review: the running stack, one order traced from the HTTP request
+Bring to the review: the running stack, `--describe` output for the topics you
+created and `design/kafka.md` beside it, one order traced from the HTTP request
 through the topic to the committed rows and the published event, the duplicate
-replay performed live, your fill rule and the reasoning behind it, the quota
-arithmetic for your configuration, the SonarQube dashboard, and the `git log`
-showing the tests arriving before the refactoring.
+replay performed live, a quote arriving on `market-data` inside one polling
+interval, a bad row landing in the dead-letter path rather than in
+`FACT_TRADES`, a second pipeline run over the same data that adds nothing, your
+fill rule and the reasoning behind it, the quota arithmetic for your
+configuration, the SonarQube dashboard, and the `git log` showing the tests
+arriving before the refactoring.

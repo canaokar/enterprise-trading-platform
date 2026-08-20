@@ -5,7 +5,8 @@
 # you build it, under the "platform" profile, so that the whole stack comes up
 # with one command. See infra/README.md.
 #
-# `docker compose up -d` starts Postgres and Kafka and creates the topics.
+# `docker compose up -d` starts Postgres and Kafka. The broker starts empty:
+# creating the topics is your work in Sprint 7, not this file's.
 # `docker compose --profile platform up -d` also starts the auth stub.
 #
 # Environment variables are read from .env at the repository root. Copy
@@ -71,6 +72,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Off, and it stays off. The topics are created by your team in Sprint 7.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
@@ -82,24 +84,6 @@ services:
       retries: 20
       start_period: 20s
     restart: unless-stopped
-
-  # One-shot topic creation. Runs infra/kafka/create-topics.sh once the broker
-  # is healthy, then exits. Auto-creation is switched off above because it
-  # silently produces a one-partition, default-retention topic, which is wrong
-  # for all three topics in contracts/kafka-topics.md.
-  kafka-init:
-    image: apache/kafka:3.8.0
-    container_name: kafka-init
-    networks: [trading-net]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    volumes:
-      - ./infra/kafka/create-topics.sh:/kafka-scripts/create-topics.sh:ro
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    entrypoint: ["bash", "/kafka-scripts/create-topics.sh"]
-    restart: "no"
 
   # ---------------------------------------------------------------------------
   # Platform services. Profile "platform": started only when asked for.

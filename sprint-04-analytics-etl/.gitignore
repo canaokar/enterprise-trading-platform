@@ -5,8 +5,5 @@
 *.duckdb
 *.duckdb.wal
 
-# Scratch venv built by scripts/check.sh.
-.check-venv/
-
 # Editable install metadata.
 *.egg-info/

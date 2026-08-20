@@ -5,6 +5,10 @@
  * specifies for a lifecycle event, and send it keyed by {@code accountId} so that one account's
  * events stay in order.
  *
+ * <p>Lifecycle events only. The quotes this service publishes to {@code market-data} are keyed by
+ * symbol, carry a different payload and go out from {@code marketdata} on its own schedule. The two
+ * may share a producer and a serialiser. They share no key, no topic and no reason to be sent.
+ *
  * <p>A rejection is an event. Publish it. The blotter, the notifications extension and the
  * analytics estate all need to know that an order failed, and a consumer that only ever sees fills
  * reports a fill rate of 100 per cent.

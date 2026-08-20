@@ -23,8 +23,11 @@ git-ignored; `.env.example` is the committed template.
 |---|---|---|---|
 | PostgreSQL 16 | `postgres` | 5432 | default, no profile |
 | Kafka 3.8, KRaft mode, single broker | `kafka` | 9092 from the host, 29092 inside the compose network | default, no profile |
-| Topic creation, one-shot | `kafka-init` | none | default, no profile |
 | Auth stub, provided | `auth-stub` | 3001 | `--profile platform` |
+
+The broker starts with no topics on it. Running a broker is not the lesson, so
+the container is provided; creating the topics, choosing the partition counts
+and configuring the producers and consumers are the Sprint 7 deliverable.
 
 ## Starting and stopping
 
@@ -84,27 +87,27 @@ the environment rather than hard-coding either value.
 
 ## Topics
 
-`kafka-init` creates the topics in `contracts/kafka-topics.md` and then exits.
-Partition counts and retention come from that contract, and the script is
-idempotent, so a topic that already exists is left alone. List what exists:
+Nothing in this folder creates a topic. Your team creates them in Sprint 7,
+against the catalogue in `contracts/kafka-topics.md`, which fixes the names,
+the keys, the partition counts and the retention. Auto-creation is switched off
+on the broker, so a producer that writes to a topic nobody created gets an
+error rather than a silently wrong one-partition topic.
+
+List what exists:
 
 ```bash
 docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 --list
 ```
 
-Expect `orders`, `trade-events`, `market-data` and a `.DLT` dead-letter topic
-for each. Check the partition count and retention of one topic:
+Before Sprint 7 that list is empty, and an empty list is the expected state
+rather than a fault. After Sprint 7 it holds `orders`, `trade-events`,
+`market-data` and a `.DLT` dead-letter topic for each. Check the partition
+count and retention of one topic:
 
 ```bash
 docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 --describe --topic market-data
-```
-
-Rerun topic creation after editing `infra/kafka/create-topics.sh`:
-
-```bash
-docker compose run --rm kafka-init
 ```
 
 Produce and consume by hand, which is the quickest way to tell a broken
@@ -127,7 +130,8 @@ docker compose up -d
 ```
 
 `-v` removes the named volumes, so this also clears every topic and every
-message on the broker. That is usually what you want during a sprint. To reset
+message on the broker. That is usually what you want during a sprint, and from
+Sprint 7 it means creating the topics again afterwards. To reset
 Postgres and leave Kafka alone, remove the one volume by name:
 
 ```bash
@@ -149,6 +153,6 @@ showcase.
 | Symptom | Usual cause |
 |---|---|
 | `bind: address already in use` on 5432 | A Postgres installed on the host is holding the port. Stop it, or change the published port in `docker-compose.yml`. |
-| `kafka-init` exits non-zero on first run | The broker was not ready. `docker compose up -d` again; the script waits and is safe to rerun. |
+| A producer or consumer fails with `UNKNOWN_TOPIC_OR_PARTITION` | The topic does not exist. Auto-creation is off, so create it. That is Sprint 7 work. |
 | Init scripts did not run | The volume already existed. `docker compose down -v` and start again. |
 | A service cannot reach the broker | It is pointed at `localhost:9092` from inside compose. Use `kafka:29092`. |

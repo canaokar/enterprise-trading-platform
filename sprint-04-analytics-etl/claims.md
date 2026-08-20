@@ -20,15 +20,14 @@ way.
 
 Filled in, a row looks like this. The claim is invented and out of domain
 deliberately, so that copying it gets you nothing. It is numbered `x` rather
-than with a digit so that the harness does not read it as one of yours:
+than with a digit so that nobody mistakes it for one of yours:
 
 | x | Parcels routed through the Leeds depot arrive a full day later than the network average, and the gap has widened every month since March. | report.html#leeds-transit-times |
 
-Add rows past the third if you have more, numbered in sequence. The harness
-reads every row whose number is a digit, counts the ones that are filled in,
-and checks that each named artefact exists. Whether the claim is true, whether the
-chart supports it, and whether a non-technical reader can read the chart
-unaided are assessed by your instructor.
+Add rows past the third if you have more, numbered in sequence. Every artefact
+named in this table has to exist in the repository. Whether the claim is true,
+whether the chart supports it, and whether a non-technical reader can read the
+chart unaided are assessed by your instructor.
 
 ## Notes
 

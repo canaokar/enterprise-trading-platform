@@ -4,20 +4,14 @@
 # builds, it runs, and it fails the acceptance criterion, which is the point:
 # an image that works is not the same as an image you would deploy. Your own
 # Dockerfile goes in this folder as `Dockerfile` and is assessed. This one is
-# not read by the harness and is not read by Docker unless you name it.
+# not read by Docker unless you name it.
 #
-# The build context is the repository root, not this folder, because the image
-# has to build both projects:
+# The build context is this folder, because everything the image needs is in
+# it. The domain package is source in this project rather than an artefact
+# somebody has to install first, so one Maven project builds the whole service:
 #
-#   docker build -f sprint-06-trade-api/Dockerfile.example -t trade-api:naive .
-#
-# WHY THE CONTEXT IS THE REPOSITORY ROOT
-#
-# This service resolves the Sprint 5 domain module from a local Maven
-# repository. The image build has no access to the one on your laptop: it runs
-# in a container with an empty ~/.m2. So the build has to compile and install
-# the domain module too, which means both folders have to be inside the build
-# context, and Docker cannot copy from above its context.
+#   docker build -f sprint-06-trade-api/Dockerfile.example \
+#     -t trade-api:naive sprint-06-trade-api
 #
 # WHAT IS WRONG WITH THIS FILE
 #
@@ -30,10 +24,10 @@
 # 2. It runs as root. A process that never needs to write to the image should
 #    not be able to.
 #
-# 3. `COPY . .` before the build means any change to any file in the repository
+# 3. `COPY . .` before the build means any change to any file in this folder
 #    invalidates the layer holding the resolved dependencies, so every rebuild
-#    re-downloads the world. It also copies the whole repository into the
-#    image, including anything git-ignored that happens to be sitting there.
+#    re-downloads the world. It also copies anything git-ignored that happens
+#    to be sitting there into the image.
 #
 # 4. The jar name is written out by hand, so a version bump in pom.xml produces
 #    an image that builds and then fails to start.
@@ -48,9 +42,8 @@ WORKDIR /build
 
 COPY . .
 
-RUN mvn -B -f sprint-05-domain-engine/pom.xml -DskipTests install
-RUN mvn -B -f sprint-06-trade-api/pom.xml -DskipTests package
+RUN mvn -B -DskipTests package
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "/build/sprint-06-trade-api/target/trade-api-1.0.0.jar"]
+CMD ["java", "-jar", "/build/target/trade-api-1.0.0.jar"]

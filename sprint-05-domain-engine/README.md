@@ -6,20 +6,21 @@ The customer already sent this exact order and it was accepted the first
 time. Those reasons are the business. Everything around them is transport,
 and transport changes.
 
-It changes twice in the next fortnight. In Sprint 6 you wrap these rules in a
-Spring Boot controller and they run inside one HTTP request. In Sprint 7 the
-same rules are called again from a Kafka consumer, in a different process,
-minutes later, against a price that did not exist when the order was placed.
-If the rules live in the controller, the Trade Executor has to reimplement
-them, and the two copies drift. The first time they drift, the platform
-accepts an order the executor then refuses, and a customer watches an order
-sit at `NEW` forever.
+It changes three times in the next five weeks. In Sprint 6 you wrap these
+rules in a Spring Boot controller and they run inside one HTTP request. In
+Sprint 7 the Trade Executor settles the same order in a different process,
+minutes later, against a price that did not exist when it was placed, and it
+has to agree with what the API decided. In Sprint 10 that same API grows
+extension routes reading the same accounts and the same positions. If the
+rules live in the controller, everything that needs them reimplements them and
+the copies drift. The first time they drift, the platform accepts an order the
+executor then refuses, and a customer watches an order sit at `NEW` forever.
 
-So the rules live here instead, in a plain Java library that neither of those
-two callers can bend. No Spring on the classpath. No JDBC driver. No HTTP
-client. Nothing that has to be started before a test can run. Sprint 6 adds a
-transport around this module and Sprint 7 adds a second one, and neither
-should force you to rewrite a rule.
+So the rules live here instead, in a package of plain Java that no caller can
+bend. No Spring. No JDBC driver. No HTTP client. Nothing that has to be
+started before a test can run. Sprint 6 takes this package into the Trade REST
+API as source and wraps a transport around it, and the transport is the part
+that is allowed to change.
 
 The second reason is cheaper to demonstrate and matters as much. A rule
 that can only be exercised by starting Postgres and posting JSON at it is a
@@ -38,12 +39,12 @@ came first.
 | Business rules 1 to 8, in the domain | as above |
 | JUnit 5 tests, written first | `src/test/java/` |
 | A UML class diagram and an order placement sequence diagram | `design/` |
-| The manifest telling the check harness your names | `manifest.env` |
 
-The scaffold gives you the Maven build, the source tree, the dependency ban
-and the harness. Every type in the table is yours to write. There are no
-stubs to fill in, deliberately: designing the types from the requirements is
-the assessment.
+The scaffold gives you the Maven build, the source tree and the dependency
+ban. That build is for this week only: it compiles the package and
+runs the suite, and it publishes nothing. Every type in the table is yours to
+write. There are no stubs to fill in, deliberately: designing the types from
+the requirements is the assessment.
 
 ## The domain model
 
@@ -139,8 +140,9 @@ never deleted.
 `FILLED`, `REJECTED` and `CANCELLED` are terminal. There is no partial-fill
 literal, which is why the Trade Executor fills in full or rejects.
 
-Spell `CANCELLED` with two `L`s. The harness names the literal it could not
-find, and this is the one it finds missing most often.
+Spell `CANCELLED` with two `L`s. It is the literal teams get wrong most often,
+and a misspelling breaks the contract, the database and the generated Angular
+types at once.
 
 ### The order request DTO
 
@@ -212,8 +214,8 @@ reasonable answer. So is a considered argument that validation alone covers
 it, provided you can say what happens when the caller is the Trade Executor
 replaying an order and never ran a validator.
 
-The harness reads the six names from `manifest.env`. Any addition of your own
-is your business and is not checked.
+Those six are what is assessed. Any type you add beyond them is your business,
+provided it descends from the same base.
 
 ## Business rules 1 to 8
 
@@ -249,9 +251,8 @@ not `ORD-400`. Test the ordering itself, not only the eight rules.
 
 **They belong to the domain, not to a controller.** This is the criterion
 that fails most often, because the shortest route to a working Sprint 6 is an
-`if` in the controller. The harness cannot see a controller you have not
-written yet, so nothing stops you this week. Sprint 6 does, and by then the
-rework is expensive.
+`if` in the controller. Nothing stops you this week, because the controller
+does not exist yet. Sprint 6 does, and by then the rework is expensive.
 
 **Rules 4 and 5 are checked twice on purpose.** The DTO constraints are a
 syntactic gate that the Sprint 6 service runs before the rules are reached.
@@ -303,8 +304,8 @@ Name them exactly that. The packages are yours. Write the other classes you
 need for the entities you are not asked about by name: the criteria set a
 floor, not a target.
 
-The harness requires at least 24 tests across those three classes. That
-number is arithmetic rather than ambition. Eight rules firing and eight not
+At least 24 tests across those three classes. That number is arithmetic rather
+than ambition. Eight rules firing and eight not
 firing is 16 in `OrderLogicTest` alone, six DTO fields is six more, and
 `AccountTest` cannot cover the list above in fewer than a handful.
 
@@ -347,23 +348,33 @@ Java 21 and Maven 3.9 or later. JUnit 5 for tests. Nothing else, and the
 build is configured to keep it that way.
 
 ```bash
-sprint-05-domain-engine/scripts/check.sh    # the acceptance harness
-
 cd sprint-05-domain-engine
-mvn test                                    # the suite
-mvn install                                 # publish to your local repository
+mvn test
 ```
 
-`mvn install` matters from Sprint 6, when the Trade REST API resolves this
-module from your local Maven repository by its coordinates. There is no
-aggregator build, so an install here has to happen before a package there.
+Nothing is published anywhere, and nothing resolves this project by its
+coordinates. In Sprint 6 the package itself moves into the Trade REST API as
+source: you copy the files across, the service compiles them with its own
+build, and the coordinates in this `pom.xml` go no further than this folder.
+That is what keeps a fresh checkout of the repository building the API with
+one command, on a machine that has never run a build here.
+
+Design the package name with the move in mind. In Sprint 6 it sits beside the
+service packages rather than underneath them, so a name that says domain
+rather than transport still reads correctly once it is there.
 
 The `pom.xml` carries a banned-dependencies rule that fails the build if
 Spring, a servlet API or a JDBC driver appears anywhere in the tree,
 including transitively. That rule is the criterion "no database, HTTP or
-Spring dependency in the domain module", enforced by the build rather than by
+Spring dependency in the domain package", enforced by the build rather than by
 good intentions. Do not remove it. If you find yourself wanting to, the thing
 you are about to add belongs in Sprint 6.
+
+After the move there is no separate build to enforce it, so the same
+constraint is read differently: no class in your domain package may reference a
+servlet, Spring or MyBatis type, and Sprint 6 is assessed on that. The rule
+survives the move. What changes is that it is a rule about what may appear
+inside a package, which is the form it takes in most codebases anyway.
 
 Nothing in this sprint needs Docker. The suite starts no container, opens no
 socket and reads no environment variable, and it should stay that way.
@@ -376,51 +387,16 @@ These are the criteria your instructor assesses against.
 2. `AccountStatus`, `OrderSide` and `OrderStatus` match exactly.
 3. The exception hierarchy covers all six specified cases.
 4. Business rules 1 to 8 are implemented in the domain, not in a controller.
-5. No database, HTTP or Spring dependency in the domain module.
+5. No database, HTTP or Spring dependency in the domain package.
 6. Tests are written before implementation, evidenced in commit history.
 7. `AccountTest`, `OrderLogicTest` and `PlaceOrderRequestValidationTest` are
    all green.
 8. UML class and sequence diagrams are committed and match the code.
 
-## The check harness
+## The review
 
-`scripts/check.sh` asserts the things a machine can assert. Run it as often
-as you like. It needs no database and no container, and it never calls
-Fauxnance, so it costs nothing against your quota.
-
-```bash
-sprint-05-domain-engine/scripts/check.sh
-```
-
-| Check | What it proves |
-|---|---|
-| `mvn clean test-compile` succeeds from a clean state | Criterion 5, the build half. The module compiles from the files in the repository, not from something cached on one laptop |
-| The whole suite passes | The floor for criterion 7 |
-| The three named test classes each produced a report | Criterion 7, by name |
-| At least 24 tests across those three | Criterion 7, the countable half |
-| The three enumerations exist under your base package | Criterion 2, the existence half |
-| Each holds exactly the contractual literals, no more and no fewer | Criterion 2, the exact half |
-| Six exception types exist, all descending from one domain base | Criterion 3 |
-| `mvn dependency:tree` contains no Spring, servlet or JDBC artefact | Criterion 5, the dependency half |
-
-It reads your base package and your six exception class names from
-`manifest.env`, so it asserts your design rather than dictating one. The
-enumeration names and the three test class names come from the acceptance
-criteria and are not yours to choose.
-
-The enumeration and exception checks read compiled classes with `javap`
-rather than reading your source, so a literal that is commented out, declared
-in a string or spelled differently in two places is caught rather than
-matched. A failure names the literal that is missing and the literal it found
-instead.
-
-### What passing does not mean
-
-The harness counts tests, it does not read them. A test that asserts nothing
-passes here. It confirms that eight rules could be implemented, and it has
-never placed an order.
-
-Assessed by a human at the design review, and not by this script:
+Assessed by your instructor, reading the code and the history against the
+criteria above:
 
 - whether each of the eight rules is correct, in the right order, and in the
   domain rather than in a caller
@@ -429,6 +405,9 @@ Assessed by a human at the design review, and not by this script:
 - whether your seam for rule 8 survives two concurrent requests
 - whether every member of the team can walk the model unaided
 
+A green suite is the floor. A test that asserts nothing is still green, and a
+package that compiles proves only that eight rules could have been implemented.
+
 Bring to the review: the diagrams, the `git log`, one rule traced from its
-first failing test to the code that satisfies it, and your answer to why the
-evaluation order is what it is.
+first failing test to the code that satisfies it, `mvn clean test` running from
+a fresh clone, and your answer to why the evaluation order is what it is.

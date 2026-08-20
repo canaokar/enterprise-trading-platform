@@ -15,12 +15,12 @@ own capital.
 ## Who uses it
 
 The customer, on an instrument page or beside a holding in the portfolio screen:
-a direction, a strength, and a sentence saying what produced it. Nothing in this
-service is useful if the customer cannot see why the signal says what it says.
+a direction, a strength, and a sentence saying what produced it. Nothing here is
+useful if the customer cannot see why the signal says what it says.
 
 ## What it integrates with
 
-| Surface | How this service uses it |
+| Surface | How this module uses it |
 |---|---|
 | `market-data` | Consume, group `advice-service`. The current price for any signal that reacts to now rather than to yesterday's close. |
 | Fauxnance `GET /candles/{symbol}` | Historical end-of-day open, high, low, close and volume. Anything with a lookback window comes from here: a moving average, a volatility estimate, a support level. |
@@ -33,8 +33,11 @@ service is useful if the customer cannot see why the signal says what it says.
 There is no contract for this extension. Design the API, write it as OpenAPI
 before you write the controller, and bring it to your instructor on day one for
 review. The platform conventions still bind: the `{errorCode, message}` envelope,
-the platform error catalogue extended only where nothing in it fits, and a bearer
-token verified by this service itself.
+the platform error catalogue extended only where nothing in it fits, and the
+bearer token the Trade REST API verifies before any of your routes run. What the
+verifier cannot decide for you is whether this caller may reach this resource,
+so every route you add compares the `accountId` claim against what it is about
+to return.
 
 ## What makes it worth building
 
@@ -48,8 +51,7 @@ and record the reasoning.
 
 The second decision is what a signal is allowed to claim. A generated number
 presented as a recommendation is a product and legal problem before it is an
-engineering one. The service states its own limitation in the response, and the
-UI renders it.
+engineering one. The response states its own limitation, and the UI renders it.
 
 ## Scope for one week
 
@@ -67,7 +69,7 @@ worth less here than a moving-average crossover somebody can defend.
 - **Access control.** As soon as signals are personalised to an account's
   holdings, the account comes from the verified token and never from a query
   parameter the caller supplies.
-- **Quota.** Cache and rate-limit candle fetches per instrument. Every service on
+- **Quota.** Cache and rate-limit candle fetches per instrument. Everything on
   the platform shares the same daily allowance, so exhausting it here degrades
   the portfolio valuation and the Trade Executor as well.
 - **No hardcoded signals.** A value that does not move when the market moves is

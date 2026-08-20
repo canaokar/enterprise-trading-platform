@@ -6,8 +6,9 @@
   <modelVersion>4.0.0</modelVersion>
 
   <!--
-    These coordinates are how the Trade REST API will resolve this module from your local Maven
-    repository in Sprint 6. Change them if you want to, and change them in Sprint 6 as well.
+    Coordinates for this project's own build, and for nothing else. Sprint 6 takes the source of
+    the domain package into the Trade REST API rather than resolving an artefact from a
+    repository, so no other build reads these. Change them if you want to.
   -->
   <groupId>com.tradingplatform</groupId>
   <artifactId>trading-engine</artifactId>
@@ -18,7 +19,7 @@
   <description>
     Sprint 5 deliverable. Entities, enumerations, the order request DTO, the exception hierarchy and
     business rules 1 to 8 for the Enterprise Trading Platform. No database access, no HTTP, no
-    Spring.
+    Spring. The Trade REST API absorbs this package as source in Sprint 6.
   </description>
 
   <properties>

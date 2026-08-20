@@ -84,22 +84,17 @@
     </dependency>
 
     <!--
-      Two dependencies you may want and this scaffold deliberately does not add.
+      One dependency you may want and this scaffold deliberately does not add: spring-kafka-test,
+      if you write a test against an embedded broker. Most of what this service decides is
+      decidable without one: the fill rule, the guarded transition and the event shape are all
+      testable with a mocked repository and a faked HTTP layer, and a test that needs a broker is a
+      test somebody will skip.
 
-      Your Sprint 5 domain module, if you call the buy and sell rules from here rather than writing
-      them again. Business rules 6 and 7 have to be re-checked at execution time, and the module is
-      the second caller's copy of them. Declare it exactly as sprint-06-trade-api/pom.xml does:
-
-        <dependency>
-          <groupId>com.tradingplatform</groupId>
-          <artifactId>trading-engine</artifactId>
-          <version>1.0.0</version>
-        </dependency>
-
-      spring-kafka-test, if you write a test against an embedded broker. Most of what this service
-      decides is decidable without one: the fill rule, the guarded transition and the event shape
-      are all testable with a mocked repository and a faked HTTP layer, and a test that needs a
-      broker is a test somebody will skip.
+      One thing you cannot add. There is no artefact carrying the Sprint 5 domain rules. That
+      package went into the Trade REST API as source in Sprint 6, and this is a different service.
+      Business rules 6 and 7 still have to be re-checked at execution time, against a price that did
+      not exist when the order was placed. Decide how this service gets them, copied source or a
+      call to the API, and record what you chose and what it costs.
     -->
 
   </dependencies>

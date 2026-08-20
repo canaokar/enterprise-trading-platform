@@ -21,12 +21,20 @@ watches it appear in a blotter. Behind that, a Spring Boot service validates
 the order against the trading rules, writes it to Postgres and publishes it to
 Kafka. A separate executor consumes the order, prices it against a live quote,
 decides whether to fill or reject it, and writes the fill, the cash movement
-and the position change in one transaction. A poller keeps quotes flowing onto
-the bus. A Python pipeline loads a star schema that answers the questions the
+and the position change in one transaction. The same executor polls the
+market-data API on a schedule and keeps quotes flowing onto the bus. A Python
+pipeline loads a DuckDB star schema that answers the questions the
 transactional database is the wrong shape for. A NestJS service issues and
-verifies the tokens holding all of it together. One extension service adds a
-capability your team chose. The Angular build is served from a private S3
-bucket behind CloudFront.
+verifies the tokens holding all of it together. One extension your team chose
+adds a capability, as a module inside the Spring Boot service rather than as a
+service of its own. The Angular build is served from a private S3 bucket behind
+CloudFront.
+
+Six things, then. The Trade REST API, which hosts the Sprint 5 domain package
+and every extension module. The Trade Executor, which holds the market-data
+poller. The NestJS auth service. The Angular front end. The Python and DuckDB
+analytics. And the Kafka backbone, which your team stands up: the broker
+container is provided, and the topics on it are yours to create and to justify.
 
 You build all of it. What you are given is already in this repository: the
 contracts your services have to satisfy, the shared infrastructure, and one
@@ -45,12 +53,12 @@ repository depends on them. The capstone starts in week 4 and runs to the end.
 | 2 to 3 | 1 and 2 | Environment, Git, agile practice, OWASP and Secure Code Warrior | none | none |
 | 4 | 3 | Data systems and data modelling | The transactional Postgres schema, with constraints, indexes, an ER diagram and seed data | `sprint-03-trade-database` |
 | 5 | 4 | Financial services and data analytics | A Python dashboard with three business insights, and ingestion as a tested extract, transform, load pipeline | `sprint-04-analytics-etl` |
-| 6 | 5 | Software engineering essentials, Java and OOAD | The trading domain engine in Java 21: entities, enumerations, validated DTOs, an exception hierarchy and the buy and sell rules | `sprint-05-domain-engine` |
+| 6 | 5 | Software engineering essentials, Java and OOAD | The trading domain package in Java 21: entities, enumerations, validated DTOs, an exception hierarchy and the buy and sell rules | `sprint-05-domain-engine` |
 | 7 | 6 | Software architecture and enterprise Java | The Trade REST API: a layered, Dockerised Spring Boot service on MyBatis, implementing `contracts/trade-api.yaml` | `sprint-06-trade-api` |
-| 8 | 7 | Enterprise data and engineering excellence | Kafka topics, the Trade Executor, the market-data poller and the batch pipeline into the analytical store | `sprint-07-event-backbone` |
+| 8 | 7 | Enterprise data and engineering excellence | The Kafka topics, the Trade Executor with the market-data poller inside it, and the batch pipeline into the analytical store | `sprint-07-event-backbone` |
 | 9 | 8 | Node.js, NestJS and authentication | The NestJS auth service implementing `contracts/auth-api.yaml`, replacing the stub | `sprint-08-auth-service` |
 | 10 | 9 | UI development with Angular | The Angular application: login, dashboard, order ticket and blotter, with unit and Playwright tests | `sprint-09-trading-ui` |
-| 11 | 10 | Applied project week | One extension microservice from the catalogue, integrated end to end, with a decision log | `sprint-10-extension-service` |
+| 11 | 10 | Applied project week | One extension from the catalogue, built as a module inside the Trade REST API, integrated end to end, with a decision log | `sprint-10-extensions` |
 | 12 | 11 | Cloud, deployment and final showcase | The Angular build on S3 behind CloudFront, deployed by one automated cycle, then the showcase | `sprint-11-cloud-deploy` |
 
 ## Sprint folders
@@ -89,9 +97,10 @@ cp .env.example .env
 docker compose up -d
 ```
 
-That starts Postgres and Kafka and creates the topics named in
-`contracts/kafka-topics.md`. Postgres comes up empty, because the schema is
-yours to design in Sprint 3. From Sprint 6, add the provided auth stub:
+That starts Postgres and Kafka. Both come up empty. The schema is yours to
+design in Sprint 3, and the topics named in `contracts/kafka-topics.md` are
+yours to create in Sprint 7, so a broker with no topics on it before then is
+expected rather than a fault. From Sprint 6, add the provided auth stub:
 
 ```bash
 docker compose --profile platform up -d --build
@@ -137,8 +146,8 @@ your own services.
 
 There is no price stream. Fauxnance has no WebSocket and no server-sent
 events. The stream that Sprint 10 extensions consume is one you create in
-Sprint 7, by polling the batch quotes endpoint and publishing each quote to
-the `market-data` topic.
+Sprint 7, inside the Trade Executor, by polling the batch quotes endpoint and
+publishing each quote to the `market-data` topic.
 
 2000 requests a day is not generous, and it is meant not to be. A team polling
 every symbol every second exhausts a key before lunch. Poll only the symbols

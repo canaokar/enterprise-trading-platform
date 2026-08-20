@@ -18,7 +18,7 @@ shape it specifies, not only the shape itself.
 | `trade-api.yaml` | OpenAPI 3.1 for the Trade REST API: order placement and cancellation, account details, balance, positions and order history, the error envelope and the full error-code catalogue. | Sprint 6 |
 | `auth-api.yaml` | OpenAPI 3.1 for authentication: registration, login, refresh and current user, and the exact JWT claims. It describes two interchangeable implementations, the stub you are given and the service you build. | Sprint 6, against the stub. Implemented in Sprint 8. |
 | `kafka-topics.md` | The topic catalogue: names, message keys, partition counts, retention, the shared event envelope, the payload schema for every event type, and which service produces and consumes each topic. | Sprint 7 |
-| `analytics-schema.sql` | The star schema for the analytical store: one fact table and its dimensions, in ANSI SQL that runs on Snowflake, DuckDB or SQLite. | Sprint 4, read. Loaded by the pipeline in Sprint 7. |
+| `analytics-schema.sql` | The star schema for the analytical store, which is DuckDB: one fact table and its dimensions, in portable ANSI SQL. | Sprint 4, read. Loaded by the pipeline in Sprint 7. |
 | `portfolio-api.yaml` | OpenAPI 3.1 for the Portfolio and P&L service: priced holdings, cost basis, and realised and unrealised profit and loss. | Sprint 10, and only if your team chooses that extension. |
 
 ## What is not here

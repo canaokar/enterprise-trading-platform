@@ -6,8 +6,8 @@ positions unpriced: a quantity and an average cost, and nothing else. Pricing a
 holding needs a live quote, and a quote is a third-party HTTP call with its own
 latency and its own failure modes. Putting that call inside the transaction that
 records a trade is the wrong trade-off for a system of record, so the valuation
-lives in its own service, reads the same positions, and is allowed to fail
-without stopping anyone from trading.
+lives in its own module, on its own routes, reading the same positions, and it
+is allowed to fail without stopping anyone from trading.
 
 This is the extension that turns a list of holdings into a statement: market
 value, cost basis, unrealised profit and loss, realised profit and loss, and one
@@ -22,16 +22,16 @@ agent reads the same numbers when a customer telephones.
 
 ## What it integrates with
 
-| Surface | How this service uses it |
+| Surface | How this module uses it |
 |---|---|
 | `contracts/portfolio-api.yaml` | Binding. The routes, the fields, the error codes and the staleness rules are already specified. |
 | Postgres: `accounts`, `instruments`, `positions` | Read-only. Quantity, average cost, instrument currency and cash balance. |
 | Fauxnance `GET /quotes?symbols=A,B,C` | Batch quotes, up to 25 symbols in one call. This is where a price comes from. |
 | `trade-events` | Optional, and the natural source for realised profit and loss, which is booked at the moment of a sale and never recomputed. |
 | `market-data` | Optional. The topic already carries the last quote the poller published, which is one answer to what to serve when Fauxnance is unreachable. |
-| Trade REST API `GET /api/v1/accounts/{id}/balance` | One of the two places cash can come from. Choose one and say why. |
+| The account balance the Trade REST API already serves | One of the two places cash can come from. Choose one and say why, and reach it through the layer that owns it rather than through a second query of your own. |
 
-Nothing in the shared trading schema is written by this service. Whatever it
+Nothing in the shared trading schema is written by this module. Whatever it
 owns, it owns in its own tables.
 
 ## The contract binds
@@ -40,8 +40,9 @@ owns, it owns in its own tables.
 same sense that `trade-api.yaml` was the specification for Sprint 6. Build to it
 rather than around it. It fixes three routes and a health check, the exact field
 names on every response, the error catalogue including `MKT-503`, and what the
-service does when a price is unavailable for some instruments rather than all of
-them.
+platform answers when a price is unavailable for some instruments rather than
+all of them. The routes are served by the Trade REST API on 8080, alongside the
+Sprint 6 endpoints, and nothing else about the document changes.
 
 Read its description block before you design anything. The definitions of cost
 basis, market value, unrealised and realised profit and loss are in there, and
@@ -52,7 +53,8 @@ today's price.
 ## What makes it worth building
 
 The arithmetic is small and the failure modes are not. Every hard part of this
-service is a question about data that is late, missing, or in the wrong currency:
+extension is a question about data that is late, missing, or in the wrong
+currency:
 
 - A quote is delayed, and Fauxnance can serve a stale one when its own upstreams
   are down. Every priced figure therefore carries the time it was observed and
@@ -85,8 +87,10 @@ not store.
   `404`, and it is logged. A customer probing another customer's portfolio is an
   access-control failure, not a lookup miss.
 - **The key stays server-side.** The browser never calls Fauxnance. Prices reach
-  the screen through this service.
+  the screen through the platform.
 - **Stale is a state, not an error.** Serve the number and mark it. Hiding it
   and showing nothing are both worse than saying how old it is.
-- **Read-only means read-only.** Grant this service a database role that can
-  select from the trading tables and write only to its own.
+- **Read-only means read-only.** This module reads the trading tables and writes
+  only to its own. It shares a database connection with the code that records
+  orders, so nothing but review keeps that boundary: no write to `accounts`,
+  `orders` or `positions` comes from a portfolio path.

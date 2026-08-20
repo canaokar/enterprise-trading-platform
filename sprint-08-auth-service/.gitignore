@@ -5,4 +5,4 @@ coverage/
 *.log
 
 # package-lock.json is committed on purpose. npm ci installs exactly what it
-# names, and the harness uses it.
+# names, so a teammate gets the tree you tested.

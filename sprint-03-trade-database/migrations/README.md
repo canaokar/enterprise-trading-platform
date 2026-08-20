@@ -17,8 +17,8 @@ underscores:
 
 The number sets the order. Files are applied in filename order, so `010_` must
 exist before `100_` does, and three digits leave room for the rest of the
-programme. `scripts/check.sh` rejects a file in this directory that does not
-match `NNN_name.sql`.
+programme. A file in this directory that does not match `NNN_name.sql` is a
+defect, because it applies at a position nobody chose.
 
 How much goes in one file is your decision. One migration per logical change
 is the useful unit: a reviewer should be able to read the filename and know
@@ -44,13 +44,11 @@ it. The history of what you did is worth keeping.
 
 ## Applying them
 
-```bash
-sprint-03-trade-database/scripts/apply.sh
-```
-
-Applies every migration here in order, then everything in `seed/`. Add
-`--fresh` to drop the database and rebuild it from these files, which is the
-only way to be sure the files are the whole truth.
+Your team writes the command that applies these files. It runs every migration
+here in filename order, then everything in `seed/`, against the Postgres
+container from the root `docker-compose.yml`. Give it a way to drop the database
+and rebuild it from these files, because that is the only way to be sure the
+files are the whole truth.
 
 ## What does not go here
 

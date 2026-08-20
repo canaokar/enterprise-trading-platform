@@ -19,10 +19,10 @@ missed a message can find it.
 
 ## What it integrates with
 
-| Surface | How this service uses it |
+| Surface | How this module uses it |
 |---|---|
 | `trade-events` | Consume, group `notification-service`. `ORDER_FILLED`, `ORDER_REJECTED` and `ORDER_CANCELLED` are all newsworthy. |
-| Customer preferences | Over HTTP, to resolve the channel before sending. |
+| Customer preferences | In-process, through the interface that module publishes, to resolve the channel before sending. |
 | Angular application | Notification history, and marking a message read if you build an inbox. |
 | An outbound channel | Email, SMS or push. A logging stub is acceptable for a channel you cannot provision, provided the routing decision is real. |
 
@@ -31,13 +31,16 @@ missed a message can find it.
 There is no contract for this extension. Design the API, write it as OpenAPI
 before you write the controller, and bring it to your instructor on day one for
 review. The platform conventions still bind: the `{errorCode, message}` envelope,
-the platform error catalogue extended only where nothing in it fits, and a bearer
-token verified by this service itself.
+the platform error catalogue extended only where nothing in it fits, and the
+bearer token the Trade REST API verifies before any of your routes run. What the
+verifier cannot decide for you is whether this caller may reach this resource,
+so every route you add compares the `accountId` claim against what it is about
+to return.
 
 ## What makes it worth building
 
 Consumption and delivery are two different failures, and separating them is the
-design problem in this service. The Kafka offset says what has been read. The
+design problem in this extension. The Kafka offset says what has been read. The
 delivery state says what has reached a customer. Commit the offset once the
 notification is durably recorded for delivery, not once an external provider has
 confirmed it, because an email provider having a bad afternoon should not stall a
@@ -49,8 +52,8 @@ message. The discipline is the one the Trade Executor already uses: key on
 `eventId` and make the second attempt a no-op.
 
 The last piece is the dependency. A notification cannot be routed without knowing
-where to route it, so the channel comes from the preferences service rather than
-from a constant in this one.
+where to route it, so the channel comes from wherever the platform holds
+preferences rather than from a constant in this module.
 
 ## Scope for one week
 
@@ -59,10 +62,10 @@ preferences, delivery on at least one real channel, notification history exposed
 to the customer, and idempotency proven by replaying an event and showing that
 nothing is sent twice.
 
-If your team is building this alone, either stand up a small preferences service
-alongside it or put the resolution behind an interface with one implementation
-and a clear seam. Hardcoding a channel and calling the dependency satisfied is
-the one shortcut this extension does not have.
+If your team is building this alone, put the resolution behind an interface with
+one implementation and a clear seam where the preferences module would sit.
+Hardcoding a channel and calling the dependency satisfied is the one shortcut
+this extension does not have.
 
 Out of scope unless the rest is finished: digest batching, retry with backoff
 that distinguishes a transient failure from a permanent one, and read receipts.
