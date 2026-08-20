@@ -54,8 +54,8 @@ and how the topics come to exist is most of what this sprint assesses.
 ## The engineering contract
 
 Set up two projects in this folder, and put the topics on the broker. The
-internals are yours. Eight things are fixed, because the compose stack, the
-contract and your teammates all depend on them.
+internals are yours. Eight things are fixed, because the contract and your
+teammates all depend on them.
 
 - The Trade Executor is one Maven project rooted at `executor/`, on Java 21 and
   Maven 3.9 or later, sources under `src/main/java` and tests under
@@ -77,7 +77,7 @@ contract and your teammates all depend on them.
   retention `contracts/kafka-topics.md` fixes, along with the three
   `<topic>.DLT` dead-letter topics whose shape is your decision. One command
   creates all six against an empty broker, and `design/kafka.md` names it.
-- The executor joins the root `docker-compose.yml`, as the Trade REST API did
+- The executor joins your local orchestration, as the Trade REST API did
   in Sprint 6. It needs `KAFKA_BOOTSTRAP_SERVERS` pointing at `kafka:29092`,
   `FAUXNANCE_API_KEY` and `POLL_INTERVAL_SECONDS` from `.env`, the database
   variables, and a `depends_on` for Postgres on its health condition.
@@ -89,7 +89,7 @@ contract and your teammates all depend on them.
   migrations. The analytical model needs the executed price too.
 
 ```bash
-docker compose up -d                          # the broker, with no topics on it
+# start your stack, including the broker, with no topics on it
 
 # then whatever you wrote that creates them
 
@@ -134,12 +134,10 @@ unknown field turns an additive change into an outage.
 
 ### Creating them
 
-The broker starts empty. Nothing creates a topic for you, and nothing above the
-broker process is provided. Running a single-node broker teaches configuration
-rather than architecture, so the container is given to you. Everything above
-that line is the deliverable: the topics, the partition counts and keys with
-the reasoning behind them, and the producer and consumer configuration in every
-service that touches them.
+The broker your team stood up against `infra/README.md` starts empty. Nothing
+creates a topic for you. The topics, the partition counts and keys with the
+reasoning behind them, and the producer and consumer configuration in every
+service that touches them are all the deliverable.
 
 Four things have to be true, and how you get there is your decision.
 
@@ -148,11 +146,11 @@ Four things have to be true, and how you get there is your decision.
   topics exist alongside them. Their shape is not fixed by the contract, so
   choose it and be ready to say why.
 - One command takes an empty broker to that state, runs without prompting, and
-  is named in `design/kafka.md`. Running `docker compose down -v` removes every
-  topic on the broker, and you will run it more than once this week, so a set of
+  is named in `design/kafka.md`. Resetting the broker's data volume removes
+  every topic on it, and you will do that more than once this week, so a set of
   topics that exists because somebody typed the commands on Tuesday is not a
   deliverable.
-- Auto-creation stays off in the compose file. An auto-created topic arrives
+- Auto-creation stays off on the broker. An auto-created topic arrives
   with one partition and default retention, silently, on first use. With it
   off, a producer writing to a topic nobody created gets an error, and an error
   is something you can act on.
@@ -317,15 +315,18 @@ double-debit an account, and that the team can demonstrate it, on demand, at
 any point in the review. Read one message off `orders` and produce it back:
 
 ```bash
-docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
-  --bootstrap-server kafka:29092 --topic orders \
+kafka-console-consumer.sh \
+  --bootstrap-server localhost:9092 --topic orders \
   --from-beginning --max-messages 1 \
   --property print.key=true --property key.separator=$'\t' > order.txt
 
-docker compose exec -T kafka /opt/kafka/bin/kafka-console-producer.sh \
-  --bootstrap-server kafka:29092 --topic orders \
+kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 --topic orders \
   --property parse.key=true --property key.separator=$'\t' < order.txt
 ```
+
+Those are the broker's own tools. Run them however your stack exposes them,
+from the host or from inside the broker container.
 
 Then show four things: the balance before, the balance after, the log line
 where the executor recognised the duplicate and did nothing, and that no second
@@ -495,6 +496,21 @@ These are the criteria your instructor assesses against.
 7. SonarQube gate passing on the pipeline and the executor.
 8. Characterisation tests written around your Sprint 6 service before it is
    changed.
+
+## Evaluation
+
+This sprint contributes 10 marks to the 100-mark Capstone assessment. The topic
+and analytics contracts are inputs. Marks are awarded for the services,
+integration and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| Topic creation, keys, partitions and event contracts | 2 |
+| Trade REST API producer and Trade Executor integration | 2 |
+| Incremental, idempotent analytics load with bad-row handling | 2 |
+| Duplicate handling, retries, dead-letter paths and transaction boundaries | 2 |
+| Tests, characterisation history, SonarQube gate and live event flow | 2 |
+| **Sprint total** | **10** |
 
 ## The review
 

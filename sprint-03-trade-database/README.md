@@ -171,10 +171,11 @@ correct empty schema, which looks fine until Sprint 4 has nothing to plot.
 Run the command often. A schema that only works because of something a
 teammate typed into psql on Tuesday will not survive the showcase.
 
-From Sprint 6 the stack has to come up with the schema already in place. Copy
+From Sprint 6 your stack has to come up with the schema already in place. Copy
 your migration and seed loading into `infra/postgres/`, keeping the numbering,
-so a fresh `docker compose up -d` builds the database unattended. See
-`infra/postgres/README.md` for how that mount behaves.
+and mount that folder into your Postgres container so a fresh start builds the
+database unattended. See `infra/postgres/README.md` for how that mount
+behaves.
 
 ## The queries your design has to serve
 
@@ -298,6 +299,22 @@ mappers are written against it, and in Sprint 7 two services write to it
 concurrently. Read `contracts/trade-api.yaml` while you design. It is the
 contract the Sprint 6 service satisfies out of this database, and a schema that
 cannot serve it is the wrong schema. Reading it is research, not shortcutting.
+
+## Evaluation
+
+This sprint contributes 7 marks to the 100-mark Capstone assessment. The domain
+brief, the contracts and the seed coverage requirements in `seed/README.md` are
+inputs. Everything else, including the seed data itself, is the team's work.
+Marks are awarded for the database design, implementation and evidence the team
+produces.
+
+| Criterion | Marks |
+|---|---:|
+| ER model, entity relationships and normalisation decisions | 2 |
+| DDL, keys, foreign keys, checks and required core tables | 2 |
+| Index justifications and historical trade data design | 1 |
+| Repeatable migrations, complete seed loading and review evidence | 2 |
+| **Sprint total** | **7** |
 
 ## The design review
 

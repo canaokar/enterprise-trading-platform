@@ -10,16 +10,16 @@ identity it can check on its own.
 
 That is why authentication is a service rather than a library. One process owns
 registration, login, hashing and the token lifecycle, and every other process
-verifies a signature with no network call and no shared database. The stub in
-`services/auth-stub` has stood in for that process since Sprint 6, with no
-database, no hashing and no refresh. This sprint retires it.
+verifies a signature with no network call and no shared database. Sprints 6 and
+7 verified tokens minted by a team-owned test fixture. This sprint builds the
+process that issues them for real.
 
 ## A short week
 
 Two SME cloud sessions run on Monday and Tuesday, so the order of the work
 decides whether it fits. Take registration and login first, with the hashing and
 the uniform failure built in rather than retrofitted. Then the guard and
-`/auth/me`, then refresh, then the cutover, which needs the rest of the stack
+`/auth/me`, then refresh, then integration, which needs the rest of the stack
 up. Fill in the security review as each part lands.
 
 ## What you deliver
@@ -32,7 +32,7 @@ up. Fill in the security review as each part lands.
 | A guard protecting `/auth/me` | as above |
 | Jest suites, including the guard paths named below | alongside the code, as `*.spec.ts` |
 | A multi-stage `Dockerfile` | this folder |
-| Your service in the root `docker-compose.yml`, with the stub removed | repository root |
+| Your service added to your local orchestration | repository root |
 | The OWASP review, filled in | `security-review/` |
 
 No starter code and no project skeleton ships. Deciding how this service is
@@ -42,8 +42,7 @@ sprint assesses.
 ## The engineering contract
 
 Set one project up in this folder. Its internals are yours. Nine things are
-fixed, because the contract, the compose stack and your teammates depend on
-them.
+fixed, because the contract and your teammates depend on them.
 
 - One NestJS project rooted in this folder, on Node 20 or later and TypeScript,
   where `npm ci`, `npm run build` and `npm test` all succeed on a machine that
@@ -65,9 +64,9 @@ them.
   between a laptop and a container read from the environment at runtime, and
   present in no committed file.
 - A multi-stage `Dockerfile` of your own design here, and the service joined to
-  the root `docker-compose.yml` in place of `auth-stub`, so that retiring the
-  stub is a configuration change in your Sprint 6 service rather than a code
-  change in it.
+  your local orchestration on the auth port, so that adopting it is a
+  configuration change in your Sprint 6 service rather than a code change in
+  it.
 
 ```bash
 cd sprint-08-auth-service
@@ -111,9 +110,7 @@ that depends on one is a service that breaks when you remove it.
 | `exp` | integer | Expiry, seconds since the Unix epoch. Fifteen minutes after `iat` |
 
 Those five are assessed. The contract defines one more, `iss`, carrying
-`auth-service` here and `auth-stub` in the fixture, so that during the cutover a
-team can decode a token and see which implementation signed it. Consumers must
-not require a particular value for it.
+`auth-service`. Consumers validate the configured issuer.
 
 Anything beyond those six is a finding, not a bonus. An email address in the
 payload is an email address published to every holder of the token, because the
@@ -202,32 +199,31 @@ throttle and know its cooldown window, and run the comparison outside it. A
 throttle limits how fast an attacker can use an oracle you left open, and does
 not close it.
 
-## Replacing the stub
+## Integrating the auth service
 
 The acceptance statement is that the Trade REST API needs no code change. Not a
 small one, and not only a configuration class: no Java changes. That is
-achievable because both implementations sign HS256 with the same `JWT_SECRET`
-and issue the same claims, so a token from either verifies with the code written
-in Sprint 6 against the fixture.
+achievable because the Sprint 6 service already verifies the claims and the
+algorithm in the contract and reads `JWT_SECRET` from configuration.
 
 | Change | Where |
 |---|---|
-| The compose service that answers on the auth port becomes yours, and the `auth-stub` service is removed | root `docker-compose.yml` |
-| Your service reads the same `JWT_SECRET` the Trade REST API verifies with | root `.env`, passed through compose |
-| The Trade REST API's issuer setting, if it pins one, names your issuer instead of the stub's | that service's configuration, from the environment |
+| Your service is added on the auth port | local orchestration |
+| Your service reads the same `JWT_SECRET` the Trade REST API verifies with | root `.env`, passed through your local orchestration |
+| The Trade REST API's issuer setting names your issuer | that service's configuration, from the environment |
 | The database connection for the credential store | your service's environment |
 
 Nothing in that table is a Java file. If your Trade REST API needs a code change
-to accept a token from this service, something in it is coupled to the fixture
-rather than to the token: a hard-coded issuer string, a claim read with a name
-the stub happened to use, or a verifier that decodes the payload before checking
-the signature.
+to accept a token from this service, something in it is coupled to a test
+fixture rather than to the contract: a hard-coded issuer string, a claim read
+with a name the fixture happened to use, or a verifier that decodes the payload
+before checking the signature.
 
-The stub's development secret is published in its own README, so anyone who has
-read this repository can mint a token your consumers accept for as long as that
-secret is in use. Keeping it is defensible in a training stack; rotating it once
-the stub is gone is the better habit. Record which you chose in the security
-review, as a decision with its reason.
+The development `JWT_SECRET` in `.env.example` is published in this repository,
+so anyone who has read it can mint a token your consumers accept for as long as
+that value is in use. Keeping it is defensible in a training stack; rotating it
+once a real issuer exists is the better habit. Record which you chose in the
+security review, as a decision with its reason.
 
 ## Tests
 
@@ -290,8 +286,8 @@ These are the criteria your instructor assesses against.
    error envelope and every code in it.
 2. The access token carries exactly the claims contract: `sub`, `accountId`,
    `roles`, `iat`, `exp`, and the `iss` the contract also defines.
-3. Swapping the stub for this service is a configuration change only, with no
-   code change in the Trade REST API.
+3. Adopting this service in the Trade REST API is a configuration change only,
+   with no code change in it.
 4. Passwords are hashed with argon2 or bcrypt, and never logged.
 5. Every refresh issues a new refresh token. Revoking the token that was
    presented is optional, and where it is not built the decision and the risk it
@@ -303,6 +299,21 @@ These are the criteria your instructor assesses against.
 8. The running service serves its OpenAPI document.
 9. The security review against the auth-related OWASP items is committed, with a
    finding and a disposition for every category.
+
+## Evaluation
+
+This sprint contributes 13 marks to the 100-mark Capstone assessment. The API
+contract and the security-review template are inputs. Marks are awarded for the
+service, security decisions and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| NestJS design and contract-compliant endpoints | 2 |
+| Registration, login, refresh and token lifecycle | 3 |
+| Password hashing, JWT claims and uniform authentication failures | 2 |
+| Guards, account authorisation and Trade REST API integration | 3 |
+| Jest coverage, served OpenAPI document and completed OWASP review | 3 |
+| **Sprint total** | **13** |
 
 ## The review
 
@@ -317,9 +328,8 @@ holds because both paths do the same work rather than because the machine was
 quiet, whether the security review is a reading of your service or of the
 template, and whether the guard runs before every route that needs it.
 
-Bring to the review: the running stack with the stub removed, all four endpoints
-exercised against the contract, one token decoded in front of the panel claim by
-claim, a wrong password and an unknown user compared on status, body and elapsed
+Bring to the review: the running stack, all four endpoints exercised against the
+contract, one token decoded in front of the panel claim by claim, a wrong password and an unknown user compared on status, body and elapsed
 time, one refresh traced through your store with the reissued token working and
 the presented one behaving as your security review says it does, the stored
 password hash, the OpenAPI document fetched from the running process, a protected

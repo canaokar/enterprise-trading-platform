@@ -282,6 +282,21 @@ These are the criteria your instructor assesses against.
    green.
 8. UML class and sequence diagrams are committed and match the code.
 
+## Evaluation
+
+This sprint contributes 18 marks to the 100-mark Capstone assessment. The
+requirements in this brief and the contracts are inputs. Marks are awarded for
+the Java design, implementation and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| UML and domain-boundary design | 3 |
+| Entities, enumerations, DTO validation and exception hierarchy | 4 |
+| Business rules, state transitions and idempotency design | 5 |
+| SOLID structure and framework-independent domain logic | 2 |
+| Meaningful JUnit coverage and test-first commit history | 4 |
+| **Sprint total** | **18** |
+
 ## The review
 
 Assessed by your instructor, reading the code and the history against the

@@ -25,7 +25,7 @@ as the text. `<BUCKET>` means type your bucket name in that position, so
 `s3://<BUCKET>/` becomes `s3://etp-team4-ui/`.
 
 Placeholders in lowercase, `<team>` and `<port>`, are free text: your team's name, a port your
-compose file already publishes. Only the capitalised ones are tracked.
+local stack already publishes. Only the capitalised ones are tracked.
 
 Placeholders are never quoted differently from the rest of a command. If a command shows
 `--paths '/index.html'`, the quotes are part of the command and stay.
@@ -79,17 +79,13 @@ Commands are run from the repository root unless a step says otherwise.
 
 ## Step 1. Confirm the prerequisite before anything else
 
-**Do**
-
-```bash
-docker compose up -d
-docker compose ps
-```
+**Do** start your local stack the way your team's orchestration starts it, then list the
+containers it brought up and confirm each one is running.
 
 Then sign in the way the Angular application does and put one request to a route from each of
 your four Sprint 10 modules, and place one order through the Trade REST API and watch it fill.
 
-**Success looks like** every container in `docker compose ps` with state `running`, four module
+**Success looks like** every container in your stack with state `running`, four module
 routes answering a real token, and one order reaching a terminal status.
 
 **If that is not what happened**
@@ -97,8 +93,8 @@ routes answering a real token, and one order reaching a terminal status.
 - **A container is not running, or a route does not answer.** Stop the cloud week here and fix
   it. Everything from Step 15 onwards verifies against this stack, and debugging it through a CDN
   is several times harder than debugging it now.
-- **Only the Kafka-dependent paths fail.** Give the stack a minute after `docker compose up -d`
-  and try again. Consumers take time to join.
+- **Only the Kafka-dependent paths fail.** Give the stack a minute after starting it and try
+  again. Consumers take time to join.
 
 Nothing after this step stops, starts or reconfigures a container. If you did not start it, do
 not touch it.
@@ -520,12 +516,12 @@ The failure is the pass. Record that you ran it.
 **Do** take this decision as a team, before you build anything, and write it in the decision log
 the same hour.
 
-Your Trade REST API and Auth service run in Docker Compose on a laptop. The Angular application
+Your Trade REST API and Auth service run in your local stack on a laptop. The Angular application
 is about to be served from a CDN. The bundle carries whatever API address it was built with, and
 that address is resolved by the browser that loaded the page, not by the machine that built it.
 
 The route this runbook takes: **build the cloud configuration to point at `http://localhost` on
-the ports your compose file already publishes.** The deployed page then loads for anybody in the
+the ports your local stack already publishes.** The deployed page then loads for anybody in the
 world, and the authenticated flows work on any machine that is running the stack, which is every
 machine in your team. Verification in Step 34 happens on one of them.
 
@@ -566,7 +562,7 @@ the API base URLs for the production configuration, and no key of any kind along
   the address from a single exported constant that the production configuration replaces. Either
   is acceptable. A value edited by hand before each deploy is not.
 - **You cannot find where the base URL is set.** It is wherever your generated clients are
-  configured with a base path. Search for the port number your compose file publishes.
+  configured with a base path. Search for the port number your local stack publishes.
 
 ## Step 17. Let the deployed origin call your services
 

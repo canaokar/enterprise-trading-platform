@@ -228,9 +228,9 @@ Distinguish the two failure classes. A malformed message will never succeed, so 
 
 ## Local operation
 
-Docker Compose runs the broker and nothing above it. The broker starts empty, and creating the topics is the team's work: no creation script ships with the platform and no container creates them on your behalf.
+Your team runs the broker, as `infra/README.md` requires. It starts empty, and creating the topics is the team's work too: no creation script ships with the platform and nothing creates them on your behalf.
 
-Auto-creation is switched off in the compose file and stays off. It produces a one-partition topic with default retention, which is wrong for all three topics here, and it produces it silently on first use. With it off, a team that has not created its topics gets an error rather than a subtly wrong platform, which is the failure you can act on.
+Auto-creation is switched off on the broker and stays off. It produces a one-partition topic with default retention, which is wrong for all three topics here, and it produces it silently on first use. With it off, a team that has not created its topics gets an error rather than a subtly wrong platform, which is the failure you can act on.
 
 The three commands below state what the contracted topics require. Where the command lives, whether it is a script, a Makefile target or three lines typed once and recorded, is the team's decision.
 

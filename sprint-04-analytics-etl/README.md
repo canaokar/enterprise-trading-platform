@@ -245,6 +245,20 @@ These are the criteria your instructor assesses against.
 5. Rate-limit and error handling are present, and not a bare `try` block.
 6. The symbols in scope include at least two NSE or BSE instruments.
 
+## Evaluation
+
+This sprint contributes 8 marks to the 100-mark Capstone assessment. The
+contracts, the candle fixtures and the `claims.md` template are inputs. Marks
+are awarded for the analysis, pipeline and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| Data preparation and defensible exploratory analysis | 2 |
+| Three valid business claims with readable charts | 2 |
+| Separated, repeatable extract, transform and load pipeline | 2 |
+| pytest coverage, malformed-input handling and output validation | 2 |
+| **Sprint total** | **8** |
+
 ## The review
 
 Whether the claim holds, whether the chart supports it, whether a reader outside

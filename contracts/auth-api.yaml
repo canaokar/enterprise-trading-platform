@@ -5,16 +5,8 @@ info:
   version: 1.0.0
   summary: Registration, login, token refresh and current-user lookup for the Enterprise Trading Platform.
   description: |
-    Binding contract for two implementations that must be interchangeable:
-
-    1. The **Node auth stub**, provided in the starter material and used in Sprints 6 and 7. It
-       issues test tokens so that the Trade REST API can be built and tested with real JWT
-       validation before Node is taught.
-    2. The **NestJS auth service**, built in Sprint 8, which replaces the stub.
-
-    Both listen on port 3000, expose the same four routes, and issue tokens with identical claims.
-    The Sprint 8 acceptance criterion is that swapping one for the other requires configuration
-    changes only: no code change in the Trade REST API, and no code change in the Angular UI.
+    Binding contract for the NestJS auth service built in Sprint 8. The Trade REST API and Angular
+    UI must depend on this contract rather than on implementation details.
 
     ## JWT claims contract
 
@@ -28,7 +20,7 @@ info:
     | `roles` | array of string | Authorisation roles. `CUSTOMER` for a normal trading user, `ADMIN` for an operator. Always present, never empty. |
     | `iat` | integer | Issued-at, seconds since the Unix epoch. |
     | `exp` | integer | Expiry, seconds since the Unix epoch. Fifteen minutes after `iat` for an access token. |
-    | `iss` | string | Issuer. `auth-stub` for the provided stub, `auth-service` for the Sprint 8 service. Present so that a team can prove which implementation signed a token during the cutover. Consumers must not require a particular value. |
+    | `iss` | string | Issuer. Use `auth-service` for the Sprint 8 service. Consumers must validate the configured issuer. |
 
     Decoded example:
 
@@ -43,9 +35,8 @@ info:
     }
     ```
 
-    Signing: `HS256` with a shared secret in development, read from `JWT_SECRET`. Both the stub and
-    the real service must use the same algorithm and the same secret so that a token from either
-    verifies in the Trade REST API without a redeploy. Move to `RS256` with a published public key
+    Signing: `HS256` with a shared secret in development, read from `JWT_SECRET`. The auth service
+    and Trade REST API must use the same algorithm and secret. Move to `RS256` with a published public key
     if a team wants the Trade REST API to verify without holding the signing secret. That is a
     documented upgrade, not a requirement.
 
@@ -73,7 +64,7 @@ info:
 
 servers:
   - url: http://localhost:3000
-    description: Local development. The stub in Sprints 6 and 7, the NestJS service from Sprint 8.
+    description: Local development.
   - url: http://auth-service:3000
     description: Service name inside the Docker Compose network.
 

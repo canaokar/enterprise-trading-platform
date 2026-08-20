@@ -337,8 +337,8 @@ security-review/       your combined OWASP review of the four modules
 
 Your code does not live here. It lives in the Trade REST API, under
 `sprint-06-trade-api/src/main/java`, one package per extension. There is nothing to add to
-`docker-compose.yml`: the service it goes into is already there. This folder holds the sprint's
-documents.
+your local orchestration: the service it goes into is already there. This folder holds the
+sprint's documents.
 
 [catalogue/stretch.md](catalogue/stretch.md) describes the two extensions in the catalogue that
 are not mandatory here. They are stretch goals and they are available only once all four
@@ -363,6 +363,21 @@ These are the criteria your instructor assesses against.
    service's tests are green.
 8. One combined OWASP security review covers all four, and its findings are addressed.
 9. An architecture decision log is committed, giving the reasoning for each significant choice.
+
+## Evaluation
+
+This sprint contributes 8 marks to the 100-mark Capstone assessment. The catalogue briefs and the
+decision-log template are inputs. All six catalogue extensions are eligible evidence under the same
+rubric, and the maximum remains 8 marks regardless of how many the team delivers.
+
+| Criterion | Marks |
+|---|---:|
+| Agreed scope, backlog and architecture decisions | 1 |
+| Functional depth of the delivered extensions | 2 |
+| End-to-end API, event, data and authentication integration | 2 |
+| Combined OWASP review and treatment of its findings | 1 |
+| Tests, quality evidence and team explanation | 2 |
+| **Sprint total** | **8** |
 
 ## Integration quality is read by a person
 

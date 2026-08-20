@@ -35,8 +35,8 @@ correction is useful. A team stopped for a day waiting for one is not.
 
 ## Do not start this week with a broken Sprint 10
 
-The prerequisite for this week is a Sprint 10 build that passes its own tests and a local Docker
-Compose stack that starts cleanly. That is a gate, not a recommendation.
+The prerequisite for this week is a Sprint 10 build that passes its own tests and a local stack
+that starts cleanly. That is a gate, not a recommendation.
 
 Every verification in this week runs against the platform you already have. Day 4 asks you to
 sign in, place an order and watch it fill, driven from a page served by a CDN. If the stack
@@ -46,12 +46,8 @@ Monday morning if that is what it takes, and treat the day you spend on it as ch
 two days it costs later.
 
 Confirm both before Step 1 of the runbook. The stack starts, and every route your four Sprint 10
-modules added still answers a real token:
-
-```bash
-docker compose up -d
-docker compose ps
-```
+modules added still answers a real token. Start it the way your team's orchestration starts it,
+and check that every container reached a running state.
 
 Nothing this week stops, restarts or reconfigures a container you did not start yourself. The
 deployment changes what serves the browser, not what the browser talks to.
@@ -72,9 +68,9 @@ resolves the bucket's own endpoint gets access denied. A browser that loads your
 shape being assessed.
 
 Only the Angular application is deployed. Postgres, Kafka, the Trade REST API, the Auth service,
-the Trade Executor and the analytics pipeline stay on Docker Compose, on your machines, exactly
-as they are. The Trade REST API hosts your four extensions and the domain package, and the Trade
-Executor runs the market-data poller. Deploying any of it is out of scope for this programme.
+the Trade Executor and the analytics pipeline stay in your local stack, on your machines,
+exactly as they are. The Trade REST API hosts your four extensions and the domain package, and
+the Trade Executor runs the market-data poller. Deploying any of it is out of scope for this programme.
 
 S3 will host a static site on its own: enable website hosting, attach a bucket policy granting
 `s3:GetObject` to `"Principal": "*"`, and the application loads. It works, and it fails this
@@ -259,6 +255,20 @@ decision-log entry that covers the deployment, because nobody is in the room to 
 5. The authenticated flows are verified against the deployed front end.
 6. The IAM user or role is scoped to the bucket and the distribution only, and no long-lived key
    is in the repository.
+
+## Evaluation
+
+This week contributes 5 marks to the 100-mark Capstone assessment. The runbook and the policy
+skeleton are inputs. Marks are awarded for the deployment, automation and evidence the team
+produces.
+
+| Criterion | Marks |
+|---|---:|
+| Private S3 origin delivered through CloudFront with origin access control | 2 |
+| Working authenticated journey from the deployed front end | 1 |
+| Repeatable deployment and invalidation entry point | 1 |
+| Scoped IAM, secret handling and recorded deployment decisions | 1 |
+| **Sprint total** | **5** |
 
 ## What a person assesses
 

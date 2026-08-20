@@ -37,7 +37,7 @@ will protect routes nobody has designed yet.
 | JWT verification on every `/api/v1/**` route | as above |
 | Tests, unit and slice, that run without a container | `src/test/java/` |
 | A multi-stage `Dockerfile` | this folder |
-| Your service added to the root `docker-compose.yml` | repository root |
+| Your service added to your local orchestration | repository root |
 
 No starter code and no stubs ship. Deciding what belongs in which layer is most
 of what this sprint assesses.
@@ -45,8 +45,7 @@ of what this sprint assesses.
 ## The engineering contract
 
 No project skeleton ships either. Set one up. Six things about it are fixed,
-because the compose stack, the later sprints and your teammates all depend on
-them:
+because the later sprints and your teammates all depend on them:
 
 - One Maven project rooted in this folder, on Maven 3.9 or later and Java 21.
   `mvn clean verify` succeeds in it on a machine that has never seen your code.
@@ -64,8 +63,8 @@ them:
   another. The layering criterion is read against that split, so make it obvious
   from the package names which is which.
 - A multi-stage `Dockerfile` of your own design, in this folder.
-- The service joined to the root `docker-compose.yml` under the `platform`
-  profile, so that `docker compose up -d` stays the infrastructure command.
+- The service joined to the local orchestration your team built against
+  `infra/README.md`, so that one command still starts the platform.
 
 Three boundaries inside that, stated plainly. Controller sources import nothing
 from your mapper package, `java.sql`, `javax.sql`, MyBatis, Spring JDBC or a
@@ -179,13 +178,12 @@ with the row, and return the affected row count, because a mapper returning
 applies behind `DELETE /api/v1/orders/{id}`: make the transition conditional on
 the state you expect, in one statement.
 
-## The auth stub
+## Authentication during Sprint 6
 
-`services/auth-stub` is provided. It is a fixture, not a deliverable: nothing in
-it is assessed and nothing in it is to be modified. It exists because Sprint 6
-has to verify a real token and Node is not taught until Sprint 8. It starts with
-the infrastructure on `docker compose up -d`, and `services/auth-stub/README.md`
-lists the five demo users, the claims and the shared signing secret.
+No token issuer is supplied. Build tests that mint signed tokens with a
+team-owned test fixture and verify them through the same production code path.
+The fixture must follow `contracts/auth-api.yaml` and must not be deployed as a
+service. Sprint 8 adds the real auth service.
 
 Verification means checking the signature, the expiry and the algorithm the
 token asks for, in that order, before reading a claim. A verifier that decodes
@@ -198,13 +196,11 @@ Whether that caller may reach the account is answered where the account key is
 known, and the answer is `ACC-403` with the same message a suspended account
 gets, so that nobody can enumerate keys.
 
-Sprint 8 replaces the stub with the real service. The claims, the algorithm and
-the secret are identical by design, so the swap is a configuration change and no
-code here is expected to move. If yours needs a code change, something is
-coupled to the stub rather than to the token, and that is worth finding now
-rather than in week 7.
+When Sprint 8 adds the auth service, only configuration should change. If Java
+code has to move, this service is coupled to an implementation detail rather
+than to the token contract, and that is worth finding now rather than in week 7.
 
-## The Dockerfile and the compose entry
+## The Dockerfile and local orchestration
 
 A single-stage build ships the image that built the service: Maven, a full JDK,
 the dependency cache and your source. The reason to care is not disk. Every tool
@@ -220,18 +216,17 @@ projects from a context wide enough to hold both folders. The domain is source
 in this project, so the context is this folder and the build stage runs one
 `mvn package`.
 
-Adding the service to `docker-compose.yml` is your change. A correct entry:
+Adding the service to your local orchestration is your change. It needs:
 
 | Needs | Because |
 |---|---|
 | A `build` block with the context and the Dockerfile path | The image is built from source, not pulled |
-| `profiles: [platform]` | It starts with `--profile platform`, alongside the other services you write, not with the bare infrastructure |
-| `networks: [trading-net]` | It resolves `postgres` and `auth-stub` by service name |
+| A shared service network | It resolves Postgres by service name |
 | A published port for the service port | `curl` from the host reaches it |
 | Database host, port, name, user and password from the environment | `localhost` inside a container is the container |
-| `JWT_SECRET` passed through from `.env` | It has to be the secret the stub signed with |
+| `JWT_SECRET` passed through from `.env` | Test tokens and the later auth service use the same configured value |
 | `depends_on` Postgres, on its health condition | Starting before the database is ready is a crash loop, not a failure |
-| A health check | `docker compose ps` should say the service is up, not merely running |
+| A health check | The orchestrator should report the service as healthy, not merely running |
 
 Nothing this sprint needs Kafka.
 
@@ -261,6 +256,22 @@ These are the criteria your instructor assesses against.
 7. A protected route rejects a missing or invalid token with `AUTH-401`.
 8. The service builds and runs from a multi-stage Dockerfile.
 
+## Evaluation
+
+This sprint contributes 18 marks to the 100-mark Capstone assessment. The API
+contract is the input. Marks are awarded for the service design, implementation
+and evidence the team produces.
+
+| Criterion | Marks |
+|---|---:|
+| Contract-compliant endpoints, responses and error catalogue | 4 |
+| Controller, service, domain and mapper boundaries | 3 |
+| MyBatis persistence, transactions and concurrency control | 4 |
+| Validation, authentication, authorisation and structured logging | 3 |
+| Reproducible multi-stage container build | 1 |
+| Unit, slice, integration and contract evidence | 3 |
+| **Sprint total** | **18** |
+
 ## The review
 
 Your instructor assesses this sprint by reading the code against the criteria
@@ -277,8 +288,8 @@ Read rather than searched for:
 - whether the lock is applied to every write to the account row
 - whether the image would survive being deployed, including what it runs as
 
-Bring to the review: the running stack with the auth stub beside it, one order
-traced from the request to the committed row, all six endpoints answering with
+Bring to the review: the running stack, one order traced from the request to the
+committed row, all six endpoints answering with
 the status and body the contract states, each code in the catalogue produced on
 demand in the envelope, a missing token and a tampered token on a protected
 route, several concurrent orders against one account with the cash reconciled

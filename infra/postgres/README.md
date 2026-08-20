@@ -1,9 +1,10 @@
 # Postgres initialisation scripts
 
-This directory is mounted into the `postgres` container at
-`/docker-entrypoint-initdb.d`. Every file in it ending in `.sql` or `.sh` runs
-once, in filename order, the first time the container starts against an empty
-data volume. It ships empty because the schema is yours to design in Sprint 3.
+Mount this directory into your `postgres` container at
+`/docker-entrypoint-initdb.d`. Every file in it ending in `.sql` or `.sh` then
+runs once, in filename order, the first time the container starts against an
+empty data volume. It ships empty because the schema is yours to design in
+Sprint 3.
 
 Put your DDL and your seed data here once you have them, numbered so the order
 is explicit:
