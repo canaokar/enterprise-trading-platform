@@ -43,9 +43,11 @@ Serialisation is JSON with UTF-8 encoding. Every message carries an envelope of 
 | `eventId` | string, UUID | Unique per message. The idempotency key for consumers. |
 | `eventType` | string, enum | Discriminates the payload. |
 | `eventTime` | string, RFC 3339 date-time in UTC | When the producer created the event, not when it was consumed. |
-| `source` | string | Producing service: `trade-api`, `trade-executor`, `market-poller`. |
+| `source` | string | Producing component: `trade-api`, `trade-executor`, `market-poller`. |
 | `schemaVersion` | integer | Starts at 1. Increment only on a breaking change. |
 | `payload` | object | Topic-specific and event-type-specific. |
+
+`source` names the component that produced the message, not the container it shipped in. Quotes on `market-data` therefore carry `market-poller` even though the poller runs inside the Trade Executor, which keeps a quote distinguishable from an execution event in the same way it always was.
 
 Adding an optional field is not a breaking change and does not increment `schemaVersion`. Removing a field, renaming one, or changing its type is breaking. Consumers must ignore fields they do not recognise.
 
@@ -181,15 +183,14 @@ Publish one message per symbol, not one message per batch. Batching the HTTP cal
 | Service | `orders` | `trade-events` | `market-data` |
 |---|---|---|---|
 | Trade REST API | produce | consume, optional, to update read models | not used |
-| Trade Executor | consume, group `trade-executor` | produce | consume, optional, for a cached last price |
-| Market-data poller | not used | not used | produce |
+| Trade Executor | consume, group `trade-executor` | produce | produce, from the scheduled poller inside it |
 | Python ETL | not used | consume, optional, group `analytics-loader` | not used |
-| Portfolio and P&L | not used | consume, group `portfolio-service` | consume, group `portfolio-service` |
-| Watchlists and price alerts | not used | not used | consume, group `watchlist-service` |
-| Customer notifications | not used | consume, group `notification-service` | not used |
-| Customer preferences | not used | not used | not used |
-| Trade advice and signals | not used | consume, group `advice-service` | consume, group `advice-service` |
-| Automated strategy execution | not used | consume, group `strategy-service` | consume, group `strategy-service` |
+| Portfolio and P&L, in the Trade REST API | not used | consume, group `portfolio-service` | consume, group `portfolio-service` |
+| Watchlists and price alerts, in the Trade REST API | not used | not used | consume, group `watchlist-service` |
+| Customer notifications, in the Trade REST API | not used | consume, group `notification-service` | not used |
+| Customer preferences, in the Trade REST API | not used | not used | not used |
+| Trade advice and signals, in the Trade REST API | not used | consume, group `advice-service` | consume, group `advice-service` |
+| Automated strategy execution, in the Trade REST API | not used | consume, group `strategy-service` | consume, group `strategy-service` |
 | Angular UI | never | never | never |
 
 Two rules follow from the matrix.
@@ -198,7 +199,9 @@ Two rules follow from the matrix.
 
 The Angular UI never speaks to Kafka. Browsers do not hold Kafka credentials. Push to the UI, where a team builds it, goes through a service over WebSocket or server-sent events.
 
-Every consumer sets an explicit `group.id`. Two different services sharing a group identifier will split the partitions between them and each will see only part of the stream, which presents as messages going missing at random.
+Every consumer sets an explicit `group.id`. Two different consumers sharing a group identifier will split the partitions between them and each will see only part of the stream, which presents as messages going missing at random.
+
+The group ids stay distinct per extension module, even though the modules now run in one process. A group id names a logical consumer, and separate ids keep each module's offsets independent: a redeployed notifications consumer must not move the watchlist consumer's position in the stream.
 
 ## Delivery semantics
 
@@ -225,7 +228,11 @@ Distinguish the two failure classes. A malformed message will never succeed, so 
 
 ## Local operation
 
-Run the broker from Docker Compose. Create the topics explicitly at startup rather than relying on auto-creation, which produces a topic with one partition and the wrong retention.
+Docker Compose runs the broker and nothing above it. The broker starts empty, and creating the topics is the team's work: no creation script ships with the platform and no container creates them on your behalf.
+
+Auto-creation is switched off in the compose file and stays off. It produces a one-partition topic with default retention, which is wrong for all three topics here, and it produces it silently on first use. With it off, a team that has not created its topics gets an error rather than a subtly wrong platform, which is the failure you can act on.
+
+The three commands below state what the contracted topics require. Where the command lives, whether it is a script, a Makefile target or three lines typed once and recorded, is the team's decision.
 
 ```bash
 kafka-topics.sh --bootstrap-server localhost:9092 --create \

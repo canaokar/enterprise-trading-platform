@@ -1,13 +1,15 @@
 # Enterprise Trading Platform, shared local infrastructure.
 #
-# This file wires the three infrastructure containers every team needs from
+# This file wires the two infrastructure containers every team needs from
 # Sprint 3 onwards, plus the provided auth stub. It does not wire any service
 # you write. Add your own service to this file in the sprint that builds it:
-# the Trade REST API in Sprint 6, the Trade Executor and the market-data
-# poller in Sprint 7, the auth service in Sprint 8, the extensions in
-# Sprint 10. By the end of the capstone this file describes your whole
-# platform, and every line in it was added by your team for a reason you can
-# explain.
+# the Trade REST API in Sprint 6, the Trade Executor in Sprint 7, the auth
+# service in Sprint 8, the extensions in Sprint 10. By the end of the capstone
+# this file describes your whole platform, and every line in it was added by
+# your team for a reason you can explain.
+#
+# The broker starts empty. Creating the topics is your work in Sprint 7, not
+# this file's.
 #
 # Environment variables are read from .env at the repository root. Copy
 # .env.example to .env before running anything here. .env is git-ignored and
@@ -73,6 +75,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Off, and it stays off. The topics are created by your team in Sprint 7.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
@@ -84,24 +87,6 @@ services:
       retries: 20
       start_period: 20s
     restart: unless-stopped
-
-  # One-shot topic creation. Runs infra/kafka/create-topics.sh once the broker
-  # reports healthy, then exits. Auto-creation is switched off above because it
-  # silently produces a one-partition, default-retention topic, which is wrong
-  # for all three topics in contracts/kafka-topics.md.
-  kafka-init:
-    image: apache/kafka:3.8.0
-    container_name: kafka-init
-    networks: [trading-net]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    volumes:
-      - ./infra/kafka/create-topics.sh:/kafka-scripts/create-topics.sh:ro
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    entrypoint: ["bash", "/kafka-scripts/create-topics.sh"]
-    restart: "no"
 
   # Provided fixture, used from Sprint 6 and retired in Sprint 8. Issues JWTs
   # with the claims contract in contracts/auth-api.yaml so that the Trade REST

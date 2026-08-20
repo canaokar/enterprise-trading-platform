@@ -18,13 +18,13 @@ that has to answer both "what is this account's cash balance right now" and
 | Component | What it does |
 |---|---|
 | Trade database | A normalised Postgres schema for accounts, instruments, orders and positions, with the constraints and indexes that keep it correct under concurrent writes |
-| Analytics pipeline | A Python extract, transform, load pipeline into a star schema, and a dashboard that answers business questions rather than showing charts |
-| Domain engine | The trading rules in Java 21, unit tested, with no database and no HTTP anywhere near them |
-| Trade REST API | A layered, Dockerised Spring Boot service implementing `contracts/trade-api.yaml`, persisting through MyBatis, verifying a JWT on every route |
-| Event backbone | Kafka topics, the Trade Executor that fills orders against live quotes, and the poller that turns a request-response pricing API into a stream |
+| Analytics pipeline | A Python extract, transform, load pipeline into a DuckDB star schema, and a dashboard that answers business questions rather than showing charts |
+| Domain package | The trading rules in Java 21, unit tested, with no database and no HTTP anywhere near them. Sprint 6 absorbs it as source |
+| Trade REST API | A layered, Dockerised Spring Boot service implementing `contracts/trade-api.yaml`, persisting through MyBatis, verifying a JWT on every route. It hosts the domain package and every extension module |
+| Event backbone | The Kafka topics your team creates and configures, and the Trade Executor that fills orders against live quotes and runs the market-data poller that turns a request-response pricing API into a stream |
 | Auth service | A NestJS service issuing and validating JWTs, with hashed credentials and refresh tokens, replacing the stub you were given |
 | Trading UI | An Angular application: login, dashboard, order ticket and blotter, with a typed client generated from the contracts and Playwright tests |
-| Extensions | Four integrated microservices: Portfolio and P&L, Customer Preferences, Customer Notifications, and Watchlists and Price Alerts |
+| Extensions | Four integrated modules inside the Trade REST API: Portfolio and P&L, Customer Preferences, Customer Notifications, and Watchlists and Price Alerts |
 
 Each component depends on the ones before it. The platform accumulates. What
 you build in Sprint 3 is what Sprint 6 queries, and what Sprint 6 exposes is
@@ -47,7 +47,7 @@ shared across every Leap cohort, and the week numbering is yours.
 | 6 | 7 | Enterprise data engineering and engineering excellence | `sprint-07-event-backbone` |
 | 7 | 8 | Node.js, NestJS and authentication | `sprint-08-auth-service` |
 | 8 | 9 | UI development with Angular | `sprint-09-trading-ui` |
-| 9 | 10 | Applied project | `sprint-10-extension-service` |
+| 9 | 10 | Applied project | `sprint-10-extensions` |
 
 Two weeks are shorter than the rest. The Monday of the Sprint 7 week is Ganesh
 Chaturthi and the Friday of the Sprint 9 week is Gandhi Jayanti. Both are
@@ -62,8 +62,8 @@ Cloud deployment runs as a separate week after the capstone, delivered by
 Fidelity as experiential learning and supported by Fidelity alumni. You deploy
 the Angular build to a private S3 bucket behind CloudFront, with an automated
 build, upload and invalidate cycle, and share the link. It assumes a Sprint 10
-build that passes its own tests and a local stack that starts cleanly, so
-leave your repository in that state at the end of week 9. Material for the
+build whose own tests pass and a local stack that starts cleanly, so leave your
+repository in that state at the end of week 9. Material for the
 week is supplied separately.
 
 ## How this repository is organised
@@ -84,8 +84,11 @@ sprints consume, meaning your services, goes in `services/` where the compose
 file can reach it.
 
 The platform is one repository and one stack. By Sprint 10 the compose file
-describes seven or eight services, all of which your team added and all of
-which your team can explain.
+describes six containers: Postgres and Kafka, which are provided, and the Trade
+REST API, the Trade Executor, the auth service and the auth stub, which your team
+adds. The Angular dev server and the Python tooling run on the host. Four
+extensions and the domain package add no containers, because they are packages
+inside the Trade REST API.
 
 ## Starting the shared infrastructure
 
@@ -95,10 +98,12 @@ docker compose up -d
 docker compose ps
 ```
 
-That gives you Postgres on 5432, a Kafka broker on 9092, the topics from
-`contracts/kafka-topics.md`, and the auth stub on 3001. Postgres starts empty:
-no schema and no seed data ship with this branch, because designing the schema
-is the Sprint 3 deliverable.
+That gives you Postgres on 5432, a Kafka broker on 9092 and the auth stub on
+3001. Both stores start empty. No schema and no seed data ship with this branch,
+because designing the schema is the Sprint 3 deliverable, and no topics are
+created for you, because creating the topics in `contracts/kafka-topics.md` and
+justifying their shape is the Sprint 7 deliverable. A broker with nothing on it
+before Sprint 7 is expected rather than a fault.
 
 Start a subset when that is all you need. Sprints 3 to 5 need only the
 database:
@@ -141,9 +146,9 @@ immediately and have it rotated. A quiet fix leaves it in the history.
 
 There is no price stream. Fauxnance answers requests; it does not push. The
 real-time behaviour in this platform is something you build in Sprint 7, with
-a poller that calls the batch endpoint on an interval and publishes each quote
-onto `market-data`. Everything downstream, including the watchlist alerts in
-Sprint 10, consumes what that poller produces.
+a poller inside the Trade Executor that calls the batch endpoint on an interval
+and publishes each quote onto `market-data`. Everything downstream, including
+the watchlist alerts in Sprint 10, consumes what that poller produces.
 
 Fauxnance covers NSE and BSE symbols alongside US equities, FX and crypto, so
 `INFY.NS`, `RELIANCE.NS` and `TATASTEEL.BO` all price. Trade instruments you

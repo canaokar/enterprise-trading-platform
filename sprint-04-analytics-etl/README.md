@@ -56,12 +56,11 @@ produces three claims you can stand behind.
 | The dashboard, and the chart artefacts it writes | artefacts committed at the paths you name |
 | Three business claims, each naming the chart that supports it | `claims.md` |
 | pytest over at least the transform, including a malformed-input case | `tests/` |
-| The manifest that tells the check harness your names | `manifest.env` |
 
 ## The engineering contract
 
 No project skeleton ships with this sprint. Set one up. Four things about it
-are fixed, because the harness and your teammates both depend on them:
+are fixed, because your teammates depend on them:
 
 - This folder is an installable Python project. `pip install -e
   sprint-04-analytics-etl` works from the repository root on a machine that has
@@ -75,15 +74,18 @@ are fixed, because the harness and your teammates both depend on them:
   `tests/`.
 
 Everything else is yours: the package name, the module names, the function
-names, the build backend and the dependency set. Declare the names in
-`manifest.env` and the harness adapts to them.
+names, the build backend and the dependency set. Be able to name all of them at
+the review.
 
 Two constraints on the dependency set are worth knowing now. Sprint 7 extends
 this project rather than replacing it, so pick libraries you are willing to
 live with for the rest of the programme. And the chart artefacts have to open
 without a network, which rules out anything that fetches its own JavaScript at
-render time. `requests`, `pandas`, `plotly`, `duckdb` and `python-dotenv` cover
-the sprint, and nothing forces that set on you.
+render time.
+
+The analytical store is DuckDB: one file on disk, no server, no account to
+provision. `requests`, `pandas`, `plotly` and `python-dotenv` cover the rest of
+the sprint, and nothing beyond `duckdb` forces that set on you.
 
 ## What a business claim is
 
@@ -129,8 +131,8 @@ part that needs a key and a network.
 aggregating, deriving. It opens no socket, reads no environment variable and
 writes nowhere.
 
-**Load** writes the result into the analytical store and is the only part that
-writes.
+**Load** writes the result into the analytical store, DuckDB, and is the only
+part that writes.
 
 The split earns its keep the first time a number comes out wrong. One function
 that fetches, cleans and writes can only be tested by running the whole thing
@@ -180,7 +182,8 @@ it. Never log the key.
 ## Testing
 
 pytest, over at least the transform, including at least one malformed-input
-case. That is the floor rather than the target.
+case. That is the floor rather than the target, and a suite of two or three
+tests over a transform this size is not coverage.
 
 The suite never touches the network. `fixtures/` holds three canned responses
 in the real envelope shape, one of them deliberately corrupted. Read them from
@@ -192,8 +195,8 @@ and raising are all defensible, and they are not equally defensible for all six.
 What is not defensible is loading a row that says a share traded at a high below
 its low and then drawing a chart from it.
 
-Declare the test that covers the malformed case in `manifest.env` as a pytest
-node id. The harness runs that one test on its own.
+Name the malformed-input test for what it asserts, so that
+`test_rejects_a_high_below_a_low` can be run and read on its own.
 
 ## The dashboard
 
@@ -217,6 +220,10 @@ python3 -m venv .venv
 .venv/bin/python -m pytest sprint-04-analytics-etl
 ```
 
+That install has to work from a clean environment on a teammate's machine, not
+only on the laptop the code was written on. Run it that way at least once before
+the review.
+
 Give the pipeline an entry point a teammate can run without reading the source,
 either a console script declared in your packaging metadata or a module with a
 `__main__` block, and say which in a note at the bottom of `claims.md`.
@@ -238,54 +245,13 @@ These are the criteria your instructor assesses against.
 5. Rate-limit and error handling are present, and not a bare `try` block.
 6. The symbols in scope include at least two NSE or BSE instruments.
 
-## The check harness
-
-`scripts/check.sh` asserts the things a machine can assert. Run it as often as
-you like. It needs no database and no container, and it never calls Fauxnance,
-so it costs nothing against your quota.
-
-```bash
-sprint-04-analytics-etl/scripts/check.sh
-```
-
-It builds a scratch virtual environment at `.check-venv/`, installs this folder
-into it, and runs your suite there. Pass `--reuse` to keep the environment
-between runs once you are iterating, and `--keep` to leave it in place after a
-run that passed so you can run pytest in it yourself.
-
-| Check | What it proves |
-|---|---|
-| This folder installs as a package into an empty environment, and the `dev` extra brings pytest | The engineering contract, and that a teammate can install it |
-| The package named in `manifest.env` imports from that environment | It is a package rather than a folder that works on one laptop |
-| The three functions named in `manifest.env` import and are callable | Criterion 3, the countable half |
-| Those three live in three different modules | Separable rather than three names in one file |
-| Code outside `tests/` names `FAUXNANCE_API_KEY`, in code rather than in a comment | Criterion 2, the weak half |
-| No key literal, and no base URL carrying a key, anywhere in this folder | The key is not in the repository |
-| The suite passes and collects at least four tests | Criterion 4, the countable half |
-| The test declared as the malformed-input case passes on its own | Criterion 4, the specific half |
-| `claims.md` holds three filled-in claims, each naming a chart file that exists | Criterion 1, the countable half |
-
-### How the harness avoids dictating your design
-
-The harness has no pipeline of its own. It reads `manifest.env` to learn what
-you called things, then asserts against those names. Declare the package, the
-three functions as `module:function`, and the malformed-input test as a pytest
-node id such as `tests/test_transform.py::test_rejects_a_high_below_a_low`.
-
-Naming the test rather than matching on a keyword is deliberate. You choose the
-name, the harness reports which test it ran when it fails, and nothing forces a
-naming convention on the rest of your suite.
-
-### What passing does not mean
-
-The harness runs your malformed-input test, it does not read it. A test that
-asserts nothing passes here. It measures the length of a claim, not its truth.
-It confirms a chart file exists, and it has never opened one. It cannot see
-which symbols you pulled.
+## The review
 
 Whether the claim holds, whether the chart supports it, whether a reader outside
-your team could read that chart unaided, and whether your error handling is four
-cases or one bare `try` are assessed by your instructor.
+your team could read that chart unaided, whether the symbols you pulled meet
+criterion 6, and whether your error handling is four cases or one bare `try` are
+assessed by your instructor, reading your code and your `claims.md` against the
+criteria above.
 
 Bring to the review: the three claims, the charts, the numbers behind one of
 them traced back to the rows they came from, your transform's decision on each

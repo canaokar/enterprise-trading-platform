@@ -84,19 +84,21 @@ Commands are run from the repository root unless a step says otherwise.
 ```bash
 docker compose up -d
 docker compose ps
-sprint-10-extension-service/scripts/check.sh --live
 ```
 
-**Success looks like** every container in `docker compose ps` with state `running`, and the
-Sprint 10 harness reporting no failures.
+Then sign in the way the Angular application does and put one request to a route from each of
+your four Sprint 10 modules, and place one order through the Trade REST API and watch it fill.
+
+**Success looks like** every container in `docker compose ps` with state `running`, four module
+routes answering a real token, and one order reaching a terminal status.
 
 **If that is not what happened**
 
-- **A container is not running, or the harness fails.** Stop the cloud week here and fix it.
-  Everything from Step 15 onwards verifies against this stack, and debugging it through a CDN is
-  several times harder than debugging it now.
-- **The harness fails only on a live probe that needs Kafka.** Give the stack a minute after
-  `docker compose up -d` and run it again. Consumers take time to join.
+- **A container is not running, or a route does not answer.** Stop the cloud week here and fix
+  it. Everything from Step 15 onwards verifies against this stack, and debugging it through a CDN
+  is several times harder than debugging it now.
+- **Only the Kafka-dependent paths fail.** Give the stack a minute after `docker compose up -d`
+  and try again. Consumers take time to join.
 
 Nothing after this step stops, starts or reconfigures a container. If you did not start it, do
 not touch it.
@@ -461,14 +463,9 @@ The region, the bucket name and the distribution id are not secrets. Pass them t
 as arguments, or export them in the shell that runs it, so that the real secrets are easy to
 find.
 
-**Success also looks like** a clean run of:
-
-```bash
-sprint-11-cloud-deploy/scripts/check.sh
-```
-
-which searches your working tree and this folder's history for anything key-shaped. Run it now,
-while a mistake is one file old.
+**Success also looks like** nothing key-shaped anywhere in the repository. Search the working
+tree and this folder's recorded history for an `AKIA` prefix and for a forty-character secret
+now, while a mistake is one file old.
 
 **If that is not what happened**
 
@@ -477,9 +474,9 @@ while a mistake is one file old.
   `aws iam delete-access-key --user-name <DEPLOY_USER> --access-key-id <KEY_ID>`.
 - **You closed the terminal before saving the secret.** It cannot be recovered. Delete that key
   and create another. That is the correct response and it costs a minute.
-- **The harness reports an access key id in the tree.** Treat it as disclosed. Deactivate and
-  delete the key in IAM first, then take it out of the file, then create a new one. That order
-  is not negotiable: removing it from the file first leaves a live credential in the history.
+- **You find an access key id in the tree.** Treat it as disclosed. Deactivate and delete the
+  key in IAM first, then take it out of the file, then create a new one. That order is not
+  negotiable: removing it from the file first leaves a live credential in the history.
 
 ## Step 14. Prove the deploy identity is limited
 
@@ -641,7 +638,7 @@ grep -rIEil 'x-api-key|api[_-]key|fauxnance|jwt[_-]?secret|execute-api\.[a-z0-9-
 
 - **A file is named.** Do not upload. Find the value, take it out of the source, and if it is a
   real Fauxnance key or a real signing secret, have it rotated today. Removing it from the next
-  build does not undo a disclosure, and the harness scans the deployed copy at Step 33 anyway.
+  build does not undo a disclosure, and Step 33 reads the deployed copy anyway.
 - **A match that is a false positive**, a variable named `apiKey` that holds nothing, for
   instance. Read the surrounding text and satisfy yourself. Then rename it, because the next
   person to run this grep will stop on it too.
@@ -1111,7 +1108,7 @@ unaided, from a clean checkout, with only their AWS profile configured.
 **If that is not what happened**
 
 - **The script has a key in it.** Take it out and rotate the key. It goes in your AWS profile,
-  and `sprint-11-cloud-deploy/scripts/check.sh` will find it if it stays.
+  not in a file anybody can clone.
 - **The script only works from one directory.** Resolve paths from the script's own location
   rather than from the caller's working directory.
 - **You cannot decide where the script should live.** Put it at `deploy/deploy-ui.sh`. You can
@@ -1150,33 +1147,37 @@ property that makes a deploy something you can do on a Friday afternoon.
 - **The build fails on a teammate's machine but not yours.** That is what `npm ci` and a
   committed lock file are for. Check both are in the script and in the repository.
 
-## Step 33. Fill in the manifest and run the harness
+## Step 33. Check the deployment from outside
 
-**Do** edit `sprint-11-cloud-deploy/manifest.env` and set `CLOUDFRONT_DOMAIN`, `BUCKET_NAME`,
-`AWS_REGION` and `DEPLOY_ENTRYPOINT`. The domain is a hostname with no scheme and no trailing
-slash. The entry point is a path relative to the sprint folder, so `../deploy/deploy-ui.sh`.
+Everything here is checked the way a customer would check it, over the network, holding no AWS
+credentials.
+
+**Do**
 
 ```bash
-sprint-11-cloud-deploy/scripts/check.sh
-sprint-11-cloud-deploy/scripts/check.sh --live
+curl -sSI "https://<DIST_DOMAIN>/"
+curl -sS "https://<BUCKET>.s3.<REGION>.amazonaws.com/index.html"
+curl -sS "https://<BUCKET>.s3-website-<REGION>.amazonaws.com/"
 ```
 
-**Success looks like** no failures in either mode. Live mode loads your application over HTTPS,
-is refused by both of your bucket's endpoints, and reads the JavaScript your distribution serves.
+Then fetch the JavaScript files your deployed `index.html` references and run the Sprint 9
+secret patterns over them, the same grep as Step 19.
+
+**Success looks like** 200 and your application from the distribution, access denied from both
+bucket endpoints, and no output at all from the grep.
 
 **If that is not what happened**
 
-- **`STOPPED: manifest.env is not filled in`.** A required key is still `CHANGE_ME`. The message
-  lists them.
-- **The domain check fails on shape.** You have put `https://` or a trailing slash in
-  `CLOUDFRONT_DOMAIN`. Hostname only.
-- **A stage is reported missing from your entry point.** The harness greps for the shape of each
-  stage. Either the stage is genuinely absent, or your deploy does it differently, in which case
-  widen the pattern in `manifest.env` and be able to justify it.
-- **A live probe fails on the first run.** Run it again before debugging it. A distribution that
-  has just changed and an invalidation in flight both produce odd answers for a few minutes.
-- **The bucket probe reports 404 `NoSuchBucket` or a redirect.** `BUCKET_NAME` or `AWS_REGION`
-  in the manifest is wrong. The harness is addressing something that is not your bucket.
+- **The distribution answers oddly on the first attempt.** Try again before debugging it. A
+  distribution that has just changed and an invalidation in flight both produce odd answers for
+  a few minutes.
+- **A bucket endpoint answers with content.** The bucket is public. Go back to Step 12 and
+  Step 22: the answer is an origin access control and a bucket policy naming the distribution,
+  not a public bucket.
+- **A bucket endpoint reports 404 `NoSuchBucket` or a redirect.** The bucket name or the region
+  in the URL is wrong. You are addressing something that is not your bucket.
+- **The grep names a file.** The bundle every visitor downloads carries a secret. Rotate it
+  today, take it out of the source, and redeploy.
 
 ## Step 34. Verify the authenticated flows against the deployed URL
 
@@ -1250,22 +1251,18 @@ the repository has to answer it.
 - `deploy/deploy-ui.sh`.
 - `deploy/iam/deploy-policy.json`, filled in.
 - `deploy/cloudfront/oac.json`, `distribution.json` and `bucket-policy.json`.
-- `sprint-11-cloud-deploy/manifest.env`, filled in.
 - The Angular environment change from Step 16.
 - The cross-origin change from Step 17.
 - Decision-log entries for Step 15 and Step 34.
 
-Then:
+Then search the merged branch, working tree and history both, for anything key-shaped one last
+time.
 
-```bash
-sprint-11-cloud-deploy/scripts/check.sh
-```
-
-**Success looks like** a green static run, including the history scan, on the merged branch.
+**Success looks like** nothing found.
 
 **If that is not what happened**
 
-- **The history scan reports an access key id.** A key is in a commit even though it is not in
+- **The history search finds an access key id.** A key is in a commit even though it is not in
   the file today. Deactivate and delete that key in IAM now, then agree as a team what to do
   about the history, and record both actions. Rotation is not optional either way.
 - **A file you meant to commit is ignored.** Check `.gitignore`. `deploy/` should not be ignored;

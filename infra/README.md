@@ -1,10 +1,9 @@
 # Infrastructure
 
-The shared local stack: one Postgres instance, one Kafka broker, a one-shot
-topic creator, and the provided auth stub. Everything here is wired by the
-root `docker-compose.yml`. Nothing here is a deliverable, and nothing here is
-assessed. It exists so that Sprint 3 has a database on day one and Sprint 7
-has a broker on day one.
+The shared local stack: one Postgres instance, one Kafka broker, and the
+provided auth stub. Everything here is wired by the root `docker-compose.yml`.
+Nothing here is a deliverable, and nothing here is assessed. It exists so that
+Sprint 3 has a database on day one and Sprint 7 has a broker on day one.
 
 Postgres ships empty. There is no schema and no seed data on this branch,
 because designing the schema is the Sprint 3 deliverable and being handed one
@@ -36,18 +35,17 @@ Start a subset by naming it. Sprints 3 to 5 need only the database:
 docker compose up -d postgres
 ```
 
-`kafka-init` runs to completion and exits, so `docker compose ps` showing it
-as exited is the expected state, not a failure. Check its log if a topic is
-missing.
-
 ## What runs where
 
 | Container | Purpose | Port |
 |---|---|---|
 | `postgres` | PostgreSQL 16, empty on first start | 5432 |
 | `kafka` | Kafka 3.8 broker in KRaft mode, single node | 9092 from your machine, 29092 inside the compose network |
-| `kafka-init` | Creates the topics, then exits | none |
 | `auth-stub` | Provided JWT issuer, Sprints 6 and 7 | 3001 |
+
+The broker starts with no topics on it. Running a broker is not the lesson, so
+the container is provided. Creating the topics, choosing the partition counts
+and configuring the producers and consumers are the Sprint 7 deliverable.
 
 Port 3000 is deliberately unused. The auth service you build in Sprint 8
 listens there, per `contracts/auth-api.yaml`, so both can run side by side
@@ -85,6 +83,9 @@ docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 --list
 ```
 
+Before Sprint 7 that list is empty, and an empty list is the expected state
+rather than a fault. After Sprint 7 it holds the topics your team created.
+
 Describe one to confirm its partition count:
 
 ```bash
@@ -102,21 +103,17 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
 
 ## Topics
 
-`infra/kafka/create-topics.sh` creates the three topics in
-`contracts/kafka-topics.md`, with the partition counts and retention that
-contract specifies, plus a dead-letter topic for each. Auto-creation is off on
-the broker, because an auto-created topic gets one partition and default
-retention, which is wrong for all three.
+Nothing in this folder creates a topic. Your team creates them in Sprint 7,
+against the catalogue in `contracts/kafka-topics.md`, which fixes the names,
+the keys, the partition counts and the retention.
 
-The script is idempotent. Rerun it after editing it, or after a reset:
+Auto-creation is off on the broker and stays off, because an auto-created topic
+gets one partition and default retention, which is wrong for all three, and it
+appears silently on first use. With it off, a producer writing to a topic
+nobody created gets an error rather than a platform that is quietly wrong.
 
-```bash
-docker compose run --rm kafka-init
-```
-
-Read the script before Sprint 7 rather than treating it as magic. The
-partition counts in it are decisions with consequences, and the contract
-explains each one. You are expected to be able to justify them.
+The partition counts are decisions with consequences, and the contract explains
+each one. You are expected to be able to justify them.
 
 ## Loading your schema
 
@@ -132,7 +129,8 @@ volume to apply them again.
 
 ## Resetting
 
-Drop everything, including all database data and every message on every topic:
+Drop everything, including all database data, every topic and every message on
+every topic. From Sprint 7 that means creating the topics again afterwards:
 
 ```bash
 docker compose down -v
@@ -160,6 +158,6 @@ you.
 |---|---|
 | `port is already allocated` | Another Postgres or Kafka is running locally. `lsof -i :5432` and stop it, or change the published port. |
 | `auth-stub` exits immediately | `JWT_SECRET` is unset. The stub refuses to start without one. Confirm `.env` exists. |
-| Topics missing | `docker compose logs kafka-init`. The broker may not have become healthy inside the wait. |
+| A producer or consumer fails with `UNKNOWN_TOPIC_OR_PARTITION` | The topic does not exist. Auto-creation is off, so create it. That is Sprint 7 work. |
 | A service cannot reach the database | It is using `localhost` from inside a container. Inside the compose network the host is `postgres`. |
 | Init scripts did not run | The volume was not empty. `docker compose down -v` and start again. |

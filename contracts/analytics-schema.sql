@@ -29,18 +29,14 @@
 --
 -- WHERE IT RUNS
 --
--- Written in ANSI SQL so that it runs unchanged on all three supported targets:
+-- DuckDB. One file on disk, no server, no account and no credentials. It reads
+-- Parquet and CSV directly, it has real DECIMAL, and the analytics service
+-- creates, loads and reads it.
 --
---   Snowflake   the target named in the curriculum. Use it if you have been
---               given an account.
---   DuckDB      the flat-file fallback. One file, no server, reads Parquet and
---               CSV directly, and is the recommended default when Snowflake is
---               unavailable.
---   SQLite      also acceptable. Weaker typing, no DECIMAL, so money arrives as
---               a float. State that limitation if you use it.
---
--- Both fallbacks are acceptable and neither costs marks. What is
--- assessed is the model and the load, not the vendor.
+-- The DDL below is nevertheless written in plain ANSI SQL rather than in DuckDB
+-- dialect. That is what makes the model portable to a hosted warehouse without
+-- a rewrite, and it is the property that made DuckDB a safe choice in the first
+-- place. What is assessed is the model and the load, not the store.
 --
 -- Portability rules followed here, and to follow in any SQL you add:
 --   - No IDENTITY, SERIAL, AUTOINCREMENT or SEQUENCE. Surrogate keys are
@@ -226,8 +222,8 @@ CREATE TABLE fact_trades (
 -- source_order_id  The operational orders.id as text. The unique constraint on
 --                  it is what makes the load idempotent: re-running a window
 --                  cannot insert the same order twice. Enforce it in the
---                  pipeline as well, because SQLite and some warehouse
---                  configurations will not.
+--                  pipeline as well, because some warehouse configurations
+--                  will not.
 -- quantity, price  Additive and semi-additive measures. quantity sums.
 --                  price does NOT sum: averaging or summing a price across
 --                  rows is meaningless. Sum trade_value instead. This mistake
@@ -248,20 +244,20 @@ CREATE TABLE fact_trades (
 -- INDEXES
 -- Not in the specification, and deliberately few.
 --
--- Snowflake has no user-defined indexes: it clusters and prunes by micro-
--- partition, so on Snowflake you set a clustering key on date_key instead of
--- creating these. DuckDB and SQLite do support indexes and benefit from them
--- on the foreign keys. The statements below are therefore commented out: apply
--- the ones your target actually uses.
+-- DuckDB supports indexes and benefits from them on the foreign keys. The
+-- statements below are commented out: apply the ones a query of yours actually
+-- needs, and be able to name that query.
+--
+-- Worth knowing before you meet one: a columnar warehouse has no user-defined
+-- indexes at all. It prunes by micro-partition, and the same star is tuned
+-- there by declaring a clustering key on date_key. The model does not change;
+-- only the mechanism that makes it fast does.
 -- =============================================================================
 
 -- CREATE INDEX ix_fact_trades_date       ON fact_trades (date_key);
 -- CREATE INDEX ix_fact_trades_account    ON fact_trades (account_key);
 -- CREATE INDEX ix_fact_trades_instrument ON fact_trades (instrument_key);
 -- CREATE INDEX ix_dim_account_current    ON dim_account (account_id, is_current);
-
--- Snowflake equivalent:
--- ALTER TABLE fact_trades CLUSTER BY (date_key);
 
 
 -- =============================================================================

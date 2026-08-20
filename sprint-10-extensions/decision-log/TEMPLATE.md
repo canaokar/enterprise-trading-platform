@@ -12,8 +12,7 @@ differently, or when somebody asked why during the sprint and the answer took
 more than a sentence.
 
 Delete this paragraph and the two above it when you fill the file in. Every
-`TODO` below has to go: the harness counts an entry only once no `TODO` is left
-in it.
+`TODO` below has to go: an entry with a `TODO` left in it is not an entry.
 
 | Field | Value |
 |---|---|

@@ -122,17 +122,16 @@ Choose types that represent money exactly and apply them consistently.
 | Deliverable | Where it lives |
 |---|---|
 | Numbered migration files creating the schema | `migrations/`, which you create |
-| One command that takes an empty database to migrated and seeded | wherever you put it, declared in `manifest.env` |
+| Seed data covering the states named in `seed/README.md` | `seed/`, as `.sql` files |
+| One command that takes an empty database to migrated and seeded | wherever you put it, named in `DESIGN.md` |
 | An ER diagram every member of the team can walk | `design/er-diagram.md` or an exported image |
 | Index justifications, one named query per index | `design/indexes.md` |
 | Your normalisation notes and any deliberate denormalisation | `design/` |
 | The historical trade data design | `DESIGN.md` |
-| The manifest that tells the check harness your names | `manifest.env` |
-| Two probe statements for the harness | `probes/` |
 
-Create `migrations/` and `design/` yourself. The harness checks that the
-diagram and the justifications exist, because a design with no written
-rationale cannot be reviewed.
+Create `migrations/` and `design/` yourself. The diagram and the justifications
+are read in the design review, because a design with no written rationale cannot
+be reviewed.
 
 ## Migrations and the apply command
 
@@ -152,22 +151,22 @@ deliverable. It has to:
 
 - take a database that exists and is empty to fully migrated and seeded
 - apply every file in `migrations/` in filename order
-- load every data file in `seed/` afterwards
+- load every seed file in `seed/` afterwards, in filename order
 - read its target database name from the `TARGET_DATABASE` environment
   variable, falling back to `POSTGRES_DB` from the repository `.env`
 - run without prompting, and exit non-zero the moment anything fails
 
 A shell script around `psql`, a Python script, a Makefile target: any of them
-is acceptable. Declare whichever you wrote in `manifest.env` as
-`APPLY_COMMAND`, as a path or command line relative to this folder. The harness
-runs exactly that command, from this folder, with nothing set for it beyond
-`TARGET_DATABASE`. A command that works only after you have exported three
-variables by hand fails there and will fail for your teammates too.
+is acceptable. Name whichever you wrote in `DESIGN.md`, as a path or command line
+relative to this folder, and expect it to be run from this folder with nothing
+set for it beyond `TARGET_DATABASE`. A command that works only after you have
+exported three variables by hand fails there and will fail for your teammates
+too.
 
 Two things reliably go wrong. `psql` without `-v ON_ERROR_STOP=1` reports an
 error and carries on, so a half-applied migration exits zero and looks fine.
-And a loader that skips a row it cannot map turns a mapping bug into missing
-data that nobody notices until Sprint 4 plots it.
+And a command that applies the migrations but never reaches `seed/` leaves a
+correct empty schema, which looks fine until Sprint 4 has nothing to plot.
 
 Run the command often. A schema that only works because of something a
 teammate typed into psql on Tuesday will not survive the showcase.
@@ -228,24 +227,20 @@ and where a cardinality came from.
 
 ## The seed data
 
-`seed/` holds four CSV files extracted from the brokerage's books: instruments,
-accounts, orders and holdings. `seed/README.md` is the data dictionary. Read it
-before you design, not after, because the data is a second description of the
-domain and it disagrees with nobody.
+You write the fixtures. `seed/README.md` states what they have to cover:
+accounts in all three states, an account with almost no cash, an instrument
+that no longer trades, orders in all four lifecycle states, and holdings that
+reconcile against the filled orders that produced them. Every one of those
+exists to make an error path reachable somewhere later in the programme, so
+read that file before you design rather than after.
 
-The files are business data, not a schema in disguise. Column names there are
-what the business calls things. How many tables that data belongs in, which
-column becomes a key, and what identifies an account internally are your
-decisions, and the loading is where those decisions get tested. Orders arrive
-carrying the customer-facing account reference rather than anything internal,
-which is exactly the mapping the Trade REST API performs in Sprint 6.
-
-Load all of it. The set covers accounts in all three states, an account with
-almost no cash, an instrument that no longer trades, orders in all four
-lifecycle states, and holdings that reconcile against the filled orders that
-produced them. Every one of those exists to make an error path reachable
-somewhere later in the programme. Adding rows of your own is fine, removing
-rows is not.
+The requirements there are business facts, not a schema in disguise. How many
+tables the data belongs in, which value becomes a key, and what identifies an
+account internally are your decisions. Writing the inserts is where those
+decisions first get tested. An order carries the customer-facing account
+reference a customer would quote on a call, and resolving that to whatever your
+schema uses internally is exactly the mapping the Trade REST API performs in
+Sprint 6.
 
 ## Historical trade data
 
@@ -277,16 +272,26 @@ can defend beats a diagram nobody can explain.
 2. The schema is version controlled as migration files, applied in a stable
    order, and the database can be rebuilt from those files alone.
 3. Foreign keys and check constraints are present and enforce the domain rules,
-   including a unique constraint on the order idempotency key.
+   including a unique constraint on the order idempotency key, at least two
+   foreign keys, and at least three check constraints, one of them covering
+   account state.
 4. At least three indexes exist and each is justified by one of the named
    queries.
-5. The provided seed data loads with one command, in full, and the six named
-   queries return sensible answers against it.
+5. Seed data covering the states named in `seed/README.md` loads with one
+   command, and the six named queries return sensible answers against it.
 6. `DESIGN.md` covers the historical trade data design, including how it is
    populated, how it is queried, and how it behaves as it grows.
 7. An ER diagram is committed, and every team member can walk it unaided.
 
-One further criterion has no automated check and is worth more than the rest.
+Two of those constraints have to be demonstrated rather than described. Write a
+statement that inserts the same order twice under one idempotency key and is
+refused by the database with SQLSTATE `23505`, unique violation. Write a second
+that inserts a row referencing a parent that does not exist and is refused with
+SQLSTATE `23503`, foreign key violation. Run both against your loaded database in
+front of your instructor. Reading the constraint out of a migration file is not
+the same as watching the database refuse the row.
+
+One further criterion is worth more than the rest.
 The model has to be the one the platform needs, not one that fits only this
 week. From Sprint 5 your Java entities are built against it, in Sprint 6 your
 mappers are written against it, and in Sprint 7 two services write to it
@@ -294,79 +299,18 @@ concurrently. Read `contracts/trade-api.yaml` while you design. It is the
 contract the Sprint 6 service satisfies out of this database, and a schema that
 cannot serve it is the wrong schema. Reading it is research, not shortcutting.
 
-## The check harness
+## The design review
 
-`scripts/check.sh` asserts the things a machine can assert. Run it as often as
-you like.
+Satisfying every countable criterion above is necessary and it is not
+sufficient. Nothing mechanical can tell you whether your schema is in third
+normal form, whether an index is justified or merely present, whether your
+historical design is the right one, or whether your team can explain any of it.
+Your instructor assesses that by reading the schema and the design notes against
+the criteria, and the review is the assessment. A team can tick every box with a
+model that is quietly wrong in a way that costs them a fortnight in Sprint 7.
 
-```bash
-sprint-03-trade-database/scripts/check.sh
-```
-
-It creates an empty scratch database inside the Postgres container, named
-`trading_check` by default, runs your apply command against it, runs its
-assertions, and drops the scratch database when they all pass. Your working
-`trading` database is never touched. When a check fails the scratch database is
-left in place so you can look at it:
-
-```bash
-docker compose exec postgres psql -U postgres -d trading_check
-```
-
-Set `CHECK_DATABASE` in the environment to use a different name, and pass
-`--keep` to hold the scratch database open after a run that passed.
-
-What it asserts:
-
-| Check | What it proves |
-|---|---|
-| `migrations/` holds numbered `.sql` files | The schema is version controlled |
-| Your apply command takes an empty database to migrated and seeded | Criterion 2, and the first half of criterion 5 |
-| The provided data files are present and every row of accounts and orders arrives | The second half of criterion 5 |
-| Accounts exist in all three states after loading | The refusal paths in Sprint 6 are reachable |
-| A unique constraint covers the declared idempotency column | The constraint exists |
-| A duplicate insert of that key is rejected by the database | The constraint is the enforcement, not application code |
-| At least two foreign keys exist | The entities are related, not four flat tables |
-| An insert referencing a parent that does not exist is rejected | The foreign keys are enforced |
-| At least three check constraints exist, one covering account state | Domain rules live in the schema |
-| At least three indexes exist that are not primary keys or constraint indexes | Criterion 4, the countable half |
-| `design/` holds an ER diagram and an index justification file | Criteria 4 and 7, the reviewable half |
-| `DESIGN.md` exists and is not empty | Criterion 6 |
-
-### How the harness avoids dictating your design
-
-The harness cannot check a schema it has not seen without either guessing your
-names or dictating them. So it asks. `manifest.env` in this folder is where you
-declare the handful of names it needs: your apply command, the accounts table,
-its state column and the three literal values it stores, the orders table and
-the column carrying the idempotency key. Fill it in once your first migration
-exists. The harness reads it and adapts. It never asserts a name it was not
-given, and it has no opinion about the rest of your schema.
-
-Two assertions cannot be made from names alone, because only you know the
-columns your tables require. Write them yourself, as SQL, in `probes/`:
-
-- `probes/duplicate-idempotency-key.sql` inserts one valid order twice with the
-  same idempotency key. The harness expects the second insert to fail with
-  SQLSTATE `23505`, unique violation.
-- `probes/orphan-foreign-key.sql` inserts one row that references a parent that
-  does not exist. The harness expects SQLSTATE `23503`, foreign key violation.
-
-Both run inside a transaction that is rolled back, so they leave nothing
-behind, and both run after the seed data has loaded, so they can reference
-loaded rows. Each file explains what to write in its own comments.
-
-### What passing does not mean
-
-Passing the harness is necessary and it is not sufficient. It cannot tell you
-whether your schema is in third normal form, whether an index is justified or
-merely present, whether your historical design is the right one, or whether
-your team can explain any of it. Those are assessed by your instructor in the
-design review, and the review is the assessment. A team can pass every check
-here with a model that is quietly wrong in a way that costs them a fortnight in
-Sprint 7.
-
-Bring to the review: the ER diagram, your migrations, the six queries with
-their plans, your index justifications, `DESIGN.md`, and the answer to "why is
-it this way and not the other way" for the three decisions you argued about the
-longest.
+Bring to the review: the ER diagram, your migrations, your apply command run
+against an empty database, the six queries with their plans, your index
+justifications, `DESIGN.md`, the two rejection statements above, and the answer
+to "why is it this way and not the other way" for the three decisions you argued
+about the longest.

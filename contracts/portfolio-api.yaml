@@ -8,15 +8,19 @@ info:
     Binding contract for the Portfolio and P&L extension, built in Sprint 10. Mandatory for this
     programme, and safe to build first, because none of the other extensions depend on it.
 
-    ## Why this is a separate service
+    These routes are served by the Trade REST API on 8080, as a module beside the order and
+    account routes. They are not a separate deployable.
+
+    ## Why this is a separate set of routes
 
     The Trade REST API already returns positions. It returns them unpriced: quantity and average
     cost, nothing more. Pricing a position needs a live quote, and pulling a quote inside the order
     write path would put a third-party HTTP call, with its own latency and its own failure modes,
     into the transaction that records a trade. That is the wrong trade-off for a system of record.
 
-    This service reads the same positions, prices them against the Fauxnance API, computes profit
-    and loss, and is allowed to fail without stopping anyone from trading.
+    These routes read the same positions, price them against the Fauxnance API, compute profit and
+    loss, and are allowed to fail without stopping anyone from trading. Keep the module's own
+    failure contained: a pricing outage answers on these paths and leaves order placement alone.
 
     ## Where the numbers come from
 
@@ -64,9 +68,9 @@ info:
     name: Instructional use only
 
 servers:
-  - url: http://localhost:8081
+  - url: http://localhost:8080
     description: Local development.
-  - url: http://portfolio-service:8081
+  - url: http://trade-api:8080
     description: Service name inside the Docker Compose network.
 
 tags:
@@ -289,9 +293,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        The same access token the Trade REST API accepts, issued by the auth service. This service
-        verifies the signature itself and compares the `accountId` claim against the path parameter.
-        Do not trust an upstream to have checked it.
+        The same access token the Trade REST API accepts, issued by the auth service. The signature
+        is verified as it is on every other `/api/**` route, and each route here compares the
+        `accountId` claim against the path parameter before it reads anything. Sharing a process with
+        the order book does not make that check optional; it makes it the one that matters.
 
   parameters:
     AccountIdPath:

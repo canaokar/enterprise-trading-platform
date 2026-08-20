@@ -33,7 +33,7 @@ The material is fixed for the week. If you find something in it that is wrong, w
 you found and what you did instead, keep going, and hand that note in with the deployment. A
 correction is useful. A team stopped for a day waiting for one is not.
 
-## Do not start this week with a red Sprint 10 harness
+## Do not start this week with a broken Sprint 10
 
 The prerequisite for this week is a Sprint 10 build that passes its own tests and a local Docker
 Compose stack that starts cleanly. That is a gate, not a recommendation.
@@ -41,16 +41,16 @@ Compose stack that starts cleanly. That is a gate, not a recommendation.
 Every verification in this week runs against the platform you already have. Day 4 asks you to
 sign in, place an order and watch it fill, driven from a page served by a CDN. If the stack
 behind that page is broken, you will be debugging Sprint 10 with an AWS distribution in front of
-it, and you will not be able to tell which layer is at fault. Fix the red harness first, on the
+it, and you will not be able to tell which layer is at fault. Fix the platform first, on the
 Monday morning if that is what it takes, and treat the day you spend on it as cheaper than the
 two days it costs later.
 
-Confirm both before Step 1 of the runbook:
+Confirm both before Step 1 of the runbook. The stack starts, and every route your four Sprint 10
+modules added still answers a real token:
 
 ```bash
 docker compose up -d
 docker compose ps
-sprint-10-extension-service/scripts/check.sh --live
 ```
 
 Nothing this week stops, restarts or reconfigures a container you did not start yourself. The
@@ -72,8 +72,9 @@ resolves the bucket's own endpoint gets access denied. A browser that loads your
 shape being assessed.
 
 Only the Angular application is deployed. Postgres, Kafka, the Trade REST API, the Auth service,
-the Trade Executor, the poller, the pipeline and your four extensions stay on Docker Compose, on
-your machines, exactly as they are. Deploying them is out of scope for this programme.
+the Trade Executor and the analytics pipeline stay on Docker Compose, on your machines, exactly
+as they are. The Trade REST API hosts your four extensions and the domain package, and the Trade
+Executor runs the market-data poller. Deploying any of it is out of scope for this programme.
 
 S3 will host a static site on its own: enable website hosting, attach a bucket policy granting
 `s3:GetObject` to `"Principal": "*"`, and the application loads. It works, and it fails this
@@ -147,9 +148,9 @@ Two rules on the credentials themselves, and neither is negotiable.
 
 **No long-lived key goes into the repository, ever, in any branch.** Not in a config file, not
 in a `.env` that slipped past `.gitignore`, not in a comment, not in a screenshot pasted into a
-document, not in a test fixture. The harness searches your working tree for the shape of an
-access key, and it searches the recorded history of this folder as well, because a key that was
-committed and then deleted is still a disclosed key.
+document, not in a test fixture. Search your working tree for the shape of an access key, and
+search the recorded history of this folder as well, because a key that was committed and then
+deleted is still a disclosed key.
 
 **Store the pair where the thing that needs it can read it and nobody else can.** Configure a
 named AWS CLI profile so that the keys live in `~/.aws/credentials` and never in your shell
@@ -186,8 +187,7 @@ both times. Test that by running it twice and loading the site in between, not b
 about it.
 
 The entry point is a shell script. The runbook builds it from the commands you have already
-run by hand, because you can run a script the moment you have written it. Declare its path in
-`manifest.env`.
+run by hand, because you can run a script the moment you have written it.
 
 ## Verifying against the deployed front end
 
@@ -230,8 +230,8 @@ this week and nothing to rehearse.
 Assessment is asynchronous, against the acceptance criteria below, from what is deployed and
 what is committed. Nobody watches you deploy. That raises the value of two things: a `README` or
 decision-log entry that says what you chose and why, and a repository state where the deploy
-entry point, the policy documents and the manifest are all committed and all agree with each
-other. An assessor who cannot tell how the bucket became private reads it as not proven.
+entry point and the policy documents are all committed and all agree with each other. An
+assessor who cannot tell how the bucket became private reads it as not proven.
 
 Tear down after your assessment is confirmed, not before and not weeks later. The runbook's
 final section deletes the distribution, the bucket, the origin access control and the deploy
@@ -243,47 +243,11 @@ user, in that order, and then checks each one is gone.
 README.md                 this brief
 RUNBOOK.md                the week, in order, with the failure modes
 iam/policy-skeleton.json  the shape of the deploy policy, ARNs as placeholders
-manifest.env              the names the harness reads
-scripts/check.sh          the acceptance harness
 ```
 
 Your deployment entry point does not live here. A script belongs at a sensible path in the
-repository, and `deploy/deploy-ui.sh` is the one the runbook uses. Name its path in
-`manifest.env` so the harness finds it.
-
-## The harness
-
-```bash
-sprint-11-cloud-deploy/scripts/check.sh
-sprint-11-cloud-deploy/scripts/check.sh --live
-```
-
-Static mode reads `manifest.env`, checks the shape of your declared bucket name and distribution
-domain, confirms your deployment entry point exists at the path you declared and covers the
-build, upload and invalidate stages, and searches the repository and this folder's history for
-anything shaped like an AWS access key.
-
-Live mode needs the deployment to exist and needs network access. It fetches your distribution
-domain over HTTPS and confirms the answer is your Angular application rather than an error page,
-probes both of your bucket's own endpoints and confirms they refuse, then fetches the JavaScript
-the deployed page references and runs the Sprint 9 secret patterns over it. It holds no AWS
-credentials and asks for none: everything it checks, it checks from outside, the way a customer
-would.
-
-Two things about it are worth saying plainly.
-
-It is lighter than every harness before it. Most of what this week is assessed on happens in an
-AWS account the harness has no credentials for. It cannot see your origin access control, it
-cannot see your IAM policy, it cannot see whether a human approved a deploy, and it cannot sign
-in.
-
-It depends on the network, so it can fail for reasons that have nothing to do with you. A
-distribution that has just been created answers oddly until it reaches `Deployed`. An
-invalidation in flight can serve you the previous build. A failure in live mode is worth a
-second run before it is worth an hour of debugging.
-
-Every skip names itself and says what would make it run. A skip is honest. A green run against
-something that was not there is not.
+repository, and `deploy/deploy-ui.sh` is the one the runbook uses. Say where you put it in the
+decision-log entry that covers the deployment, because nobody is in the room to ask.
 
 ## Acceptance criteria
 
@@ -298,9 +262,17 @@ something that was not there is not.
 
 ## What a person assesses
 
-Say it plainly, because the harness is short enough to be mistaken for the assessment. The
-harness can tell you that a URL answered, that a bucket refused, that a file exists and mentions
-three stages, and that no key-shaped string is in your tree.
+Every criterion this week is read from what you left behind. A URL that answers, a bucket that
+refuses and a script that mentions three stages are the floor, and most of what the week is
+assessed on happens in an AWS account nobody else holds credentials for.
+
+Check what you can from outside before you submit, the way a customer would. Fetch your
+distribution domain over HTTPS and confirm the answer is your Angular application rather than an
+error page. Probe both of your bucket's own endpoints and confirm they refuse. Fetch the
+JavaScript the deployed page references and run the Sprint 9 secret patterns over it: the bundle
+CloudFront serves is the bundle every visitor gets. A distribution that has just been created
+answers oddly until it reaches `Deployed`, and an invalidation in flight can serve you the
+previous build, so an odd answer is worth a second attempt before it is worth an hour.
 
 Everything the criteria turn on is read by a person, afterwards, from what you left behind.
 Whether the bucket is private because of an origin access control or because nobody has made it
