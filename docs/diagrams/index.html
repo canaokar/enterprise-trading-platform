@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture diagrams · Enterprise Trading Platform</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+
+  :root {
+    color-scheme: light dark;
+
+    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f6; --sunken:#e8ecf2;
+    --ink:#11141a; --ink-2:#39414f; --muted:#6a7280;
+    --rule:#dce1e9; --rule-strong:#c2c9d5;
+
+    --built-fill:#e9edfc; --built-stroke:#3a55cc; --built-ink:#22349a;
+    --infra-fill:#eceff4; --infra-stroke:#98a1b0; --infra-ink:#4c5462;
+    --store-fill:#fdf1de; --store-stroke:#c07818; --store-ink:#7c4906;
+    --topic-fill:#e0f4ef; --topic-stroke:#0e8a73; --topic-ink:#06594a;
+
+    --band-fill:#f6f8fe; --band-rule:#d3dcf7;
+
+    --shadow: 0 1px 2px rgba(17,20,26,.05), 0 12px 32px rgba(17,20,26,.06);
+    --radius: 10px;
+
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0d1015; --surface:#141920; --surface-2:#1a2029; --sunken:#11161d;
+      --ink:#e9edf4; --ink-2:#c3cad6; --muted:#98a1b1;
+      --rule:#262e39; --rule-strong:#38414f;
+
+      --built-fill:#19234a; --built-stroke:#8299f3; --built-ink:#c3cffd;
+      --infra-fill:#191e26; --infra-stroke:#788293; --infra-ink:#b0b9c7;
+      --store-fill:#2a2012; --store-stroke:#dda254; --store-ink:#f3cd99;
+      --topic-fill:#0e2620; --topic-stroke:#43bda3; --topic-ink:#8edfca;
+
+      --band-fill:#151c2e; --band-rule:#2a3560;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.35);
+    }
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--font); line-height:1.55;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  .wrap { max-width:1240px; margin:0 auto; padding:44px 24px 72px; }
+
+  a { color:var(--built-stroke); }
+  .kicker {
+    display:inline-block; font-size:.75rem; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--muted); text-decoration:none;
+  }
+  .kicker:hover { color:var(--built-stroke); }
+
+  h1 { font-size:2rem; line-height:1.15; letter-spacing:-.018em; font-weight:650; margin:.35em 0 .3em; }
+  h2 { font-size:1.25rem; letter-spacing:-.012em; font-weight:650; margin:2.8rem 0 .5rem; }
+  h3 { font-size:1rem; font-weight:650; margin:1.9rem 0 .35rem; }
+  .lead { font-size:1.0625rem; color:var(--ink-2); max-width:74ch; margin:0 0 .8em; }
+  .prose p, .prose ul, .prose ol { max-width:74ch; }
+  .prose li { margin:.25em 0; }
+
+  code { font-family:var(--mono); font-size:.88em; background:var(--surface-2); padding:.12em .36em; border-radius:4px; }
+
+  figure { margin:26px 0 0; }
+  .canvas {
+    overflow-x:auto; background:var(--surface); border:1px solid var(--rule);
+    border-radius:var(--radius); padding:16px; box-shadow:var(--shadow);
+  }
+  .canvas > svg { display:block; height:auto; }
+  figcaption { color:var(--muted); font-size:.8125rem; margin-top:10px; max-width:74ch; }
+
+  .table-wrap { overflow-x:auto; margin-top:14px; }
+  table { border-collapse:collapse; width:100%; font-size:.875rem; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  th { font-weight:650; background:var(--surface-2); }
+  td code { background:transparent; padding:0; }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(268px,1fr)); gap:14px; margin-top:18px; }
+  .card {
+    display:block; text-decoration:none; color:inherit; background:var(--surface);
+    border:1px solid var(--rule); border-radius:var(--radius); padding:16px 18px;
+    box-shadow:var(--shadow); transition:border-color .15s ease, transform .15s ease;
+  }
+  .card:hover { border-color:var(--built-stroke); transform:translateY(-1px); }
+  .card b { display:block; font-size:1rem; margin-bottom:4px; letter-spacing:-.01em; }
+  .card span { display:block; color:var(--muted); font-size:.8125rem; line-height:1.5; }
+  .card em {
+    display:inline-block; font-style:normal; font-family:var(--mono); font-size:.6875rem;
+    letter-spacing:.04em; color:var(--built-ink); background:var(--built-fill);
+    border:1px solid var(--built-stroke); border-radius:999px; padding:1px 8px; margin-bottom:8px;
+  }
+  .card em.infra { color:var(--infra-ink); background:var(--infra-fill); border-color:var(--infra-stroke); }
+  .card em.topic { color:var(--topic-ink); background:var(--topic-fill); border-color:var(--topic-stroke); }
+
+  .legend-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(244px,1fr)); gap:14px 24px; margin-top:14px; }
+  .legend-item { display:flex; gap:12px; align-items:flex-start; }
+  .legend-item svg { flex:0 0 auto; margin-top:3px; }
+  .legend-item b { display:block; font-size:.875rem; }
+  .legend-item span { display:block; color:var(--muted); font-size:.8125rem; line-height:1.45; }
+
+  .page-foot { margin-top:64px; padding-top:18px; border-top:1px solid var(--rule); font-size:.8125rem; }
+  .page-foot nav { display:flex; flex-wrap:wrap; gap:6px 18px; }
+  .page-foot a { color:var(--muted); text-decoration:none; }
+  .page-foot a:hover { color:var(--built-stroke); }
+
+  .d-title { font:650 13.5px var(--font); letter-spacing:-.005em; }
+  .d-name  { font:650 15px var(--font); letter-spacing:-.008em; }
+  .d-sub   { font:400 10.5px var(--font); }
+  .d-small { font:400 9.25px var(--font); }
+  .d-mono  { font:400 10px var(--mono); }
+  .d-monos { font:400 9px var(--mono); }
+  .d-cap   { font:650 9.5px var(--font); letter-spacing:.12em; }
+  .d-edge  { font:400 9.25px var(--font); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="kicker">Enterprise Trading Platform</span>
+    <h1>Architecture diagrams</h1>
+    <p class="lead">Eight pages describing the platform you build over Sprints 3 to 11: one view of the whole
+    system, one deeper design view, and one page for each of the six things a team is responsible for.
+    Everything on these pages is drawn from the contracts in <code>docs/contracts/</code> and from the
+    service code, so a name you see here is a name you will type.</p>
+  </header>
+
+  <div class="prose">
+    <p>Read them in order. The block diagram tells you the shape of the system in ten seconds. The
+    high-level design tells you how a request moves through it and where the trust boundaries sit. The
+    service pages tell you what is inside each box, and each one is the page to have open while you are
+    writing that service.</p>
+  </div>
+
+  <h2>The whole platform</h2>
+  <div class="cards">
+    <a class="card" href="system-block.html">
+      <em>overview</em>
+      <b>System block diagram</b>
+      <span>Every component, every connection, labelled with protocol and direction. Start here.</span>
+    </a>
+    <a class="card" href="hld.html">
+      <em>design</em>
+      <b>High-level design</b>
+      <span>Layers, the write path and the read path, trust boundaries, the operational and analytical
+      split, and order placement end to end.</span>
+    </a>
+  </div>
+
+  <h2>The six things you build</h2>
+  <div class="cards">
+    <a class="card" href="service-trade-api.html">
+      <em>Java 21 · :8080</em>
+      <b>Trade REST API</b>
+      <span>The write path and the read path. Holds the domain package and every extension module.</span>
+    </a>
+    <a class="card" href="service-trade-executor.html">
+      <em>Java 21 · health :8082</em>
+      <b>Trade Executor</b>
+      <span>Consumes <code>orders</code>, prices the fill, settles it in one transaction, publishes the
+      outcome. Runs the market-data poller on a schedule.</span>
+    </a>
+    <a class="card" href="service-auth.html">
+      <em>NestJS 11 · :3000</em>
+      <b>Auth service</b>
+      <span>Registration, login, refresh, current user. The only service that ever sees a password.</span>
+    </a>
+    <a class="card" href="service-frontend.html">
+      <em>Angular · :4200</em>
+      <b>Frontend</b>
+      <span>Login, dashboard, order ticket, blotter. Holds the JWT and attaches it on every call.</span>
+    </a>
+    <a class="card" href="service-analytics.html">
+      <em>Python 3.12+ · DuckDB</em>
+      <b>Analytics service</b>
+      <span>Batch extract, transform, load into a star schema, and the dashboard that reads it.</span>
+    </a>
+    <a class="card" href="service-kafka.html">
+      <em class="topic">Kafka · :9092</em>
+      <b>Kafka event backbone</b>
+      <span>Three topics, their keys, partitions and retention, and which service is on each end.</span>
+    </a>
+  </div>
+
+  <h2>How to read these diagrams</h2>
+  <div class="prose">
+    <p>One visual language runs through every page. Colour carries meaning and nothing else does, so a
+    shape you recognise on one page means the same thing on the next.</p>
+  </div>
+  <div class="legend-grid">
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="1" y="1" width="42" height="24" rx="6" fill="var(--built-fill)" stroke="var(--built-stroke)" stroke-width="1.6"/></svg>
+      <div><b>Built by the team</b><span>One of the six. You write it, test it and own it.</span></div>
+    </div>
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="1" y="1" width="42" height="24" rx="6" fill="var(--infra-fill)" stroke="var(--infra-stroke)" stroke-width="1.6" stroke-dasharray="5 4"/></svg>
+      <div><b>Provided</b><span>Already running or already written. Configure it, do not build it.</span></div>
+    </div>
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><path d="M4 6.5c0-2 4-3.5 9-3.5s9 1.5 9 3.5v13c0 2-4 3.5-9 3.5s-9-1.5-9-3.5z" fill="var(--store-fill)" stroke="var(--store-stroke)" stroke-width="1.6"/><path d="M4 6.5c0 2 4 3.5 9 3.5s9-1.5 9-3.5" fill="none" stroke="var(--store-stroke)" stroke-width="1.6"/><rect x="26" y="4" width="16" height="18" rx="4" fill="var(--store-fill)" stroke="var(--store-stroke)" stroke-width="1.6"/></svg>
+      <div><b>Data store</b><span>Something on disk that survives a restart: PostgreSQL, the DuckDB file.</span></div>
+    </div>
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="1" y="5" width="42" height="16" rx="8" fill="var(--topic-fill)" stroke="var(--topic-stroke)" stroke-width="1.6"/><path d="M15 5v16M29 5v16" stroke="var(--topic-stroke)" stroke-width="1.2" opacity=".55"/></svg>
+      <div><b>Kafka topic</b><span>Divided into its real partition count. Messages, not rows.</span></div>
+    </div>
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><defs><marker id="lg-http" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 10 4 0 8z" fill="var(--built-stroke)"/></marker></defs><path d="M2 13h32" stroke="var(--built-stroke)" stroke-width="1.7" marker-end="url(#lg-http)"/></svg>
+      <div><b>HTTP</b><span>A synchronous call. The caller waits for the answer.</span></div>
+    </div>
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><defs><marker id="lg-store" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 10 4 0 8z" fill="var(--store-stroke)"/></marker></defs><path d="M2 13h32" stroke="var(--store-stroke)" stroke-width="1.7" marker-end="url(#lg-store)"/></svg>
+      <div><b>JDBC and SQL</b><span>A database connection. Rows in, rows out.</span></div>
+    </div>
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><defs><marker id="lg-topic" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 10 4 0 8z" fill="var(--topic-stroke)"/></marker></defs><path d="M2 13h32" stroke="var(--topic-stroke)" stroke-width="1.7" marker-end="url(#lg-topic)"/></svg>
+      <div><b>Kafka produce or consume</b><span>Asynchronous. The producer does not wait and does not know who reads.</span></div>
+    </div>
+    <div class="legend-item">
+      <svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><defs><marker id="lg-ext" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="10" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 10 4 0 8z" fill="var(--infra-stroke)"/></marker></defs><path d="M2 13h32" stroke="var(--infra-stroke)" stroke-width="1.7" stroke-dasharray="6 4" marker-end="url(#lg-ext)"/></svg>
+      <div><b>Call out of the platform</b><span>Leaves the compose network. Rate limited, and it can fail.</span></div>
+    </div>
+  </div>
+
+  <h2>What the diagrams assume</h2>
+  <div class="prose">
+    <p>The platform is five services and a broker the team stands up and owns, plus infrastructure that is
+    handed to you. Two rules follow from that and they explain most of what you will see.</p>
+    <p>One language per service. Java in the Trade REST API and the Trade Executor, TypeScript in the auth
+    service and the frontend, Python in the analytics service and nowhere else. A container that runs two
+    runtimes is a container nobody wants to debug.</p>
+    <p>One place for each responsibility. One service accepts orders. One service executes them and calls
+    the Fauxnance API. One service sees passwords. One store answers "what is my balance now" and a
+    different store answers "what did the desk trade last quarter".</p>
+  </div>
+
+  <footer class="page-foot">
+    <nav aria-label="All diagrams">
+      <a href="index.html">Index</a>
+      <a href="system-block.html">System block</a>
+      <a href="hld.html">High-level design</a>
+      <a href="service-trade-api.html">Trade REST API</a>
+      <a href="service-trade-executor.html">Trade Executor</a>
+      <a href="service-auth.html">Auth service</a>
+      <a href="service-frontend.html">Frontend</a>
+      <a href="service-analytics.html">Analytics</a>
+      <a href="service-kafka.html">Kafka backbone</a>
+    </nav>
+  </footer>
+
+</div>
+</body>
+</html>
