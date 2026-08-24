@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kafka event backbone · Enterprise Trading Platform</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+
+  :root {
+    color-scheme: light dark;
+
+    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f6; --sunken:#e8ecf2;
+    --ink:#11141a; --ink-2:#39414f; --muted:#6a7280;
+    --rule:#dce1e9; --rule-strong:#c2c9d5;
+
+    --built-fill:#e9edfc; --built-stroke:#3a55cc; --built-ink:#22349a;
+    --infra-fill:#eceff4; --infra-stroke:#98a1b0; --infra-ink:#4c5462;
+    --store-fill:#fdf1de; --store-stroke:#c07818; --store-ink:#7c4906;
+    --topic-fill:#e0f4ef; --topic-stroke:#0e8a73; --topic-ink:#06594a;
+
+    --band-fill:#f6f8fe; --band-rule:#d3dcf7;
+
+    --shadow: 0 1px 2px rgba(17,20,26,.05), 0 12px 32px rgba(17,20,26,.06);
+    --radius: 10px;
+
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0d1015; --surface:#141920; --surface-2:#1a2029; --sunken:#11161d;
+      --ink:#e9edf4; --ink-2:#c3cad6; --muted:#98a1b1;
+      --rule:#262e39; --rule-strong:#38414f;
+
+      --built-fill:#19234a; --built-stroke:#8299f3; --built-ink:#c3cffd;
+      --infra-fill:#191e26; --infra-stroke:#788293; --infra-ink:#b0b9c7;
+      --store-fill:#2a2012; --store-stroke:#dda254; --store-ink:#f3cd99;
+      --topic-fill:#0e2620; --topic-stroke:#43bda3; --topic-ink:#8edfca;
+
+      --band-fill:#151c2e; --band-rule:#2a3560;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.35);
+    }
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--font); line-height:1.55; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .wrap { max-width:1240px; margin:0 auto; padding:44px 24px 72px; }
+
+  a { color:var(--built-stroke); }
+  .kicker { display:inline-block; font-size:.75rem; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); text-decoration:none; }
+  .kicker:hover { color:var(--built-stroke); }
+
+  h1 { font-size:2rem; line-height:1.15; letter-spacing:-.018em; font-weight:650; margin:.35em 0 .3em; }
+  h2 { font-size:1.25rem; letter-spacing:-.012em; font-weight:650; margin:2.8rem 0 .5rem; }
+  h3 { font-size:1rem; font-weight:650; margin:1.9rem 0 .35rem; }
+  .lead { font-size:1.0625rem; color:var(--ink-2); max-width:74ch; margin:0 0 .8em; }
+  .prose p, .prose ul, .prose ol { max-width:74ch; }
+  .prose li { margin:.25em 0; }
+
+  code { font-family:var(--mono); font-size:.88em; background:var(--surface-2); padding:.12em .36em; border-radius:4px; }
+
+  figure { margin:26px 0 0; }
+  .canvas { overflow-x:auto; background:var(--surface); border:1px solid var(--rule); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); }
+  .canvas > svg { display:block; height:auto; }
+  figcaption { color:var(--muted); font-size:.8125rem; margin-top:10px; max-width:74ch; }
+
+  .table-wrap { overflow-x:auto; margin-top:14px; }
+  table { border-collapse:collapse; width:100%; font-size:.875rem; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  th { font-weight:650; background:var(--surface-2); }
+  td code { background:transparent; padding:0; }
+
+  .page-foot { margin-top:64px; padding-top:18px; border-top:1px solid var(--rule); font-size:.8125rem; }
+  .page-foot nav { display:flex; flex-wrap:wrap; gap:6px 18px; }
+  .page-foot a { color:var(--muted); text-decoration:none; }
+  .page-foot a:hover { color:var(--built-stroke); }
+
+  .d-title { font:650 13.5px var(--font); letter-spacing:-.005em; }
+  .d-name  { font:650 15px var(--font); letter-spacing:-.008em; }
+  .d-topic { font:650 13px var(--mono); }
+  .d-sub   { font:400 10.5px var(--font); }
+  .d-small { font:400 9.25px var(--font); }
+  .d-mono  { font:400 10px var(--mono); }
+  .d-monos { font:400 9px var(--mono); }
+  .d-cap   { font:650 9.5px var(--font); letter-spacing:.12em; }
+  .d-edge  { font:400 9.25px var(--font); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="kicker" href="index.html">Enterprise Trading Platform · architecture diagrams</a>
+    <h1>Kafka event backbone</h1>
+    <p class="lead">Apache Kafka, 9092 from the host and 29092 inside the compose network. Three topics,
+    three dead-letter topics, and one message envelope that every service understands.</p>
+  </header>
+
+  <div class="prose">
+    <p>Compose starts the broker process and stops there. Everything above that line is the team's work:
+    creating the topics with the contracted names, partition counts, replication factor and retention,
+    writing down why those numbers are right, and configuring every producer and consumer. Auto-creation is
+    switched off, so a team that has not created its topics gets an error rather than a one-partition topic
+    with default retention that silently behaves almost correctly.</p>
+    <p>The catalogue in <code>docs/contracts/kafka-topics.md</code> is binding. Renaming a topic or changing
+    a field breaks every consumer in the platform, including ones another team wrote.</p>
+  </div>
+
+  <figure>
+    <div class="canvas">
+      <svg viewBox="0 0 1160 730" width="1160" role="img" aria-labelledby="kf-t kf-d">
+        <title id="kf-t">The three topics, their producers and their consumers</title>
+        <desc id="kf-d">Three topic lanes. The orders topic is produced by the Trade REST API and consumed
+        only by the Trade Executor. The trade-events topic is produced by the Trade Executor and consumed by
+        four extension modules and the analytics service. The market-data topic is produced by the scheduled
+        poller in the Trade Executor and consumed by four extension modules. Partition counts are drawn to
+        scale, and the shared message envelope is shown below.</desc>
+
+        <defs>
+          <marker id="kf-topic" viewBox="0 0 10 8" refX="9.5" refY="4" markerWidth="10" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 10 4 0 8z" fill="var(--topic-stroke)"/></marker>
+        </defs>
+
+        <text class="d-cap" x="32"  y="30" fill="var(--muted)">PRODUCERS</text>
+        <text class="d-cap" x="340" y="30" fill="var(--muted)">TOPIC</text>
+        <text class="d-cap" x="836" y="30" fill="var(--muted)">CONSUMERS</text>
+
+        <!-- =============== lane 1: orders =============== -->
+        <rect x="340" y="52" width="440" height="120" rx="10" fill="var(--topic-fill)" stroke="var(--topic-stroke)" stroke-width="1.7"/>
+        <text class="d-topic" x="356" y="77" fill="var(--topic-ink)">orders</text>
+        <text class="d-small" x="764" y="77" text-anchor="end" fill="var(--topic-ink)" opacity=".8">a work queue</text>
+        <text class="d-small" x="356" y="95"  fill="var(--topic-ink)" opacity=".9">key accountId as a string · 3 partitions · replication 1 locally, 3 in a real cluster</text>
+        <text class="d-small" x="356" y="109" fill="var(--topic-ink)" opacity=".9">retention 7 days · cleanup delete · eventType ORDER_PLACED · source trade-api</text>
+        <g>
+          <rect x="356" y="118" width="132" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="494" y="118" width="132" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="632" y="118" width="132" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <text class="d-monos" x="422" y="132" text-anchor="middle" fill="var(--topic-ink)">p0</text>
+          <text class="d-monos" x="560" y="132" text-anchor="middle" fill="var(--topic-ink)">p1</text>
+          <text class="d-monos" x="698" y="132" text-anchor="middle" fill="var(--topic-ink)">p2</text>
+        </g>
+        <text class="d-small" x="356" y="158" fill="var(--topic-ink)" opacity=".8">One consumer group only. A second group means the same order filled twice.</text>
+
+        <rect x="32" y="82" width="250" height="60" rx="8" fill="var(--built-fill)" stroke="var(--built-stroke)" stroke-width="1.5"/>
+        <text class="d-title" x="44" y="104" fill="var(--built-ink)">Trade REST API</text>
+        <text class="d-small" x="44" y="122" fill="var(--built-ink)" opacity=".78">messaging.KafkaEventPublisher</text>
+        <text class="d-small" x="44" y="136" fill="var(--built-ink)" opacity=".78">publishes after the database commit</text>
+
+        <rect x="836" y="82" width="292" height="60" rx="8" fill="var(--built-fill)" stroke="var(--built-stroke)" stroke-width="1.5"/>
+        <text class="d-title" x="848" y="104" fill="var(--built-ink)">Trade Executor</text>
+        <text class="d-monos" x="848" y="122" fill="var(--built-ink)">group trade-executor</text>
+        <text class="d-small" x="848" y="136" fill="var(--built-ink)" opacity=".78">three partitions, so at most three useful instances</text>
+
+        <path d="M282 112H340" fill="none" stroke="var(--topic-stroke)" stroke-width="1.7" marker-end="url(#kf-topic)"/>
+        <path d="M780 112H836" fill="none" stroke="var(--topic-stroke)" stroke-width="1.7" marker-end="url(#kf-topic)"/>
+
+        <!-- =============== lane 2: trade-events =============== -->
+        <rect x="340" y="200" width="440" height="120" rx="10" fill="var(--topic-fill)" stroke="var(--topic-stroke)" stroke-width="1.7"/>
+        <text class="d-topic" x="356" y="225" fill="var(--topic-ink)">trade-events</text>
+        <text class="d-small" x="764" y="225" text-anchor="end" fill="var(--topic-ink)" opacity=".8">the platform's event log</text>
+        <text class="d-small" x="356" y="243" fill="var(--topic-ink)" opacity=".9">key accountId as a string · 3 partitions · replication 1 locally, 3 in a real cluster</text>
+        <text class="d-small" x="356" y="257" fill="var(--topic-ink)" opacity=".9">retention 30 days · cleanup delete · ORDER_FILLED, ORDER_REJECTED, ORDER_CANCELLED</text>
+        <g>
+          <rect x="356" y="266" width="132" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="494" y="266" width="132" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="632" y="266" width="132" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <text class="d-monos" x="422" y="280" text-anchor="middle" fill="var(--topic-ink)">p0</text>
+          <text class="d-monos" x="560" y="280" text-anchor="middle" fill="var(--topic-ink)">p1</text>
+          <text class="d-monos" x="698" y="280" text-anchor="middle" fill="var(--topic-ink)">p2</text>
+        </g>
+        <text class="d-small" x="356" y="306" fill="var(--topic-ink)" opacity=".8">Carries cashDelta and positionQuantityAfter, so a consumer can hold its own view.</text>
+
+        <rect x="32" y="230" width="250" height="60" rx="8" fill="var(--built-fill)" stroke="var(--built-stroke)" stroke-width="1.5"/>
+        <text class="d-title" x="44" y="252" fill="var(--built-ink)">Trade Executor</text>
+        <text class="d-small" x="44" y="270" fill="var(--built-ink)" opacity=".78">messaging.TradeEventPublisher</text>
+        <text class="d-small" x="44" y="284" fill="var(--built-ink)" opacity=".78">one message per outcome, fills and rejects</text>
+
+        <rect x="836" y="200" width="292" height="120" rx="8" fill="var(--built-fill)" stroke="var(--built-stroke)" stroke-width="1.5"/>
+        <text class="d-small" x="848" y="220" fill="var(--built-ink)" opacity=".78">Trade REST API, extension modules</text>
+        <text class="d-monos" x="848" y="238" fill="var(--built-ink)">portfolio-service</text>
+        <text class="d-monos" x="848" y="252" fill="var(--built-ink)">notification-service</text>
+        <text class="d-monos" x="848" y="266" fill="var(--built-ink)">advice-service</text>
+        <text class="d-monos" x="848" y="280" fill="var(--built-ink)">strategy-service</text>
+        <text class="d-small" x="848" y="298" fill="var(--built-ink)" opacity=".78">Analytics service</text>
+        <text class="d-monos" x="848" y="312" fill="var(--built-ink)">analytics-loader, optional</text>
+
+        <path d="M282 260H340" fill="none" stroke="var(--topic-stroke)" stroke-width="1.7" marker-end="url(#kf-topic)"/>
+        <path d="M780 260H836" fill="none" stroke="var(--topic-stroke)" stroke-width="1.7" marker-end="url(#kf-topic)"/>
+
+        <!-- =============== lane 3: market-data =============== -->
+        <rect x="340" y="348" width="440" height="120" rx="10" fill="var(--topic-fill)" stroke="var(--topic-stroke)" stroke-width="1.7"/>
+        <text class="d-topic" x="356" y="373" fill="var(--topic-ink)">market-data</text>
+        <text class="d-small" x="764" y="373" text-anchor="end" fill="var(--topic-ink)" opacity=".8">high volume, low value per message</text>
+        <text class="d-small" x="356" y="391" fill="var(--topic-ink)" opacity=".9">key symbol · 6 partitions · replication 1 locally, 3 in a real cluster</text>
+        <text class="d-small" x="356" y="405" fill="var(--topic-ink)" opacity=".9">retention 1 day · cleanup delete · eventType QUOTE · source market-poller</text>
+        <g>
+          <rect x="356" y="414" width="63" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="425" y="414" width="63" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="494" y="414" width="63" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="563" y="414" width="63" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="632" y="414" width="63" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <rect x="701" y="414" width="63" height="20" rx="5" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.2"/>
+          <text class="d-monos" x="388" y="428" text-anchor="middle" fill="var(--topic-ink)">p0</text>
+          <text class="d-monos" x="457" y="428" text-anchor="middle" fill="var(--topic-ink)">p1</text>
+          <text class="d-monos" x="526" y="428" text-anchor="middle" fill="var(--topic-ink)">p2</text>
+          <text class="d-monos" x="595" y="428" text-anchor="middle" fill="var(--topic-ink)">p3</text>
+          <text class="d-monos" x="664" y="428" text-anchor="middle" fill="var(--topic-ink)">p4</text>
+          <text class="d-monos" x="733" y="428" text-anchor="middle" fill="var(--topic-ink)">p5</text>
+        </g>
+        <text class="d-small" x="356" y="454" fill="var(--topic-ink)" opacity=".8">One message per symbol, never one per batch. Batching is a quota decision only.</text>
+
+        <rect x="32" y="378" width="250" height="60" rx="8" fill="var(--built-fill)" stroke="var(--built-stroke)" stroke-width="1.5"/>
+        <text class="d-title" x="44" y="400" fill="var(--built-ink)">Trade Executor</text>
+        <text class="d-small" x="44" y="418" fill="var(--built-ink)" opacity=".78">marketdata.MarketDataPoller, scheduled</text>
+        <text class="d-small" x="44" y="432" fill="var(--built-ink)" opacity=".78">one message per symbol, keyed by symbol</text>
+
+        <rect x="836" y="348" width="292" height="120" rx="8" fill="var(--built-fill)" stroke="var(--built-stroke)" stroke-width="1.5"/>
+        <text class="d-small" x="848" y="368" fill="var(--built-ink)" opacity=".78">Trade REST API, extension modules</text>
+        <text class="d-monos" x="848" y="386" fill="var(--built-ink)">portfolio-service</text>
+        <text class="d-monos" x="848" y="400" fill="var(--built-ink)">watchlist-service</text>
+        <text class="d-monos" x="848" y="414" fill="var(--built-ink)">advice-service</text>
+        <text class="d-monos" x="848" y="428" fill="var(--built-ink)">strategy-service</text>
+        <text class="d-small" x="848" y="450" fill="var(--built-ink)" opacity=".7">The frontend never consumes a topic.</text>
+
+        <path d="M282 408H340" fill="none" stroke="var(--topic-stroke)" stroke-width="1.7" marker-end="url(#kf-topic)"/>
+        <path d="M780 408H836" fill="none" stroke="var(--topic-stroke)" stroke-width="1.7" marker-end="url(#kf-topic)"/>
+
+        <!-- =============== dead letter =============== -->
+        <rect x="32" y="500" width="1096" height="84" rx="10" fill="var(--topic-fill)" stroke="var(--topic-stroke)" stroke-width="1.5" stroke-dasharray="6 4"/>
+        <text class="d-cap"   x="48" y="522" fill="var(--topic-ink)" opacity=".85">DEAD LETTER</text>
+        <text class="d-monos" x="48" y="542" fill="var(--topic-ink)">orders.DLT    ·    trade-events.DLT    ·    market-data.DLT</text>
+        <text class="d-small" x="48" y="558" fill="var(--topic-ink)" opacity=".85">The original message as the value, the failure reason in a header. A malformed message goes here on the first attempt, because it will never succeed.</text>
+        <text class="d-small" x="48" y="574" fill="var(--topic-ink)" opacity=".85">A transient failure, for example a 503 from Fauxnance, is retried with backoff and dead-lettered only when the retry budget is spent.</text>
+
+        <!-- =============== envelope =============== -->
+        <rect x="32" y="600" width="1096" height="114" rx="10" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1.3" stroke-dasharray="4 5"/>
+        <text class="d-cap" x="48" y="622" fill="var(--muted)">MESSAGE ENVELOPE, IDENTICAL ON ALL THREE TOPICS</text>
+        <g>
+          <rect x="48"  y="636" width="150" height="28" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.2"/>
+          <text class="d-monos" x="60" y="654" fill="var(--ink-2)">eventId · UUID</text>
+          <rect x="208" y="636" width="150" height="28" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.2"/>
+          <text class="d-monos" x="220" y="654" fill="var(--ink-2)">eventType · enum</text>
+          <rect x="368" y="636" width="150" height="28" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.2"/>
+          <text class="d-monos" x="380" y="654" fill="var(--ink-2)">eventTime · RFC 3339</text>
+          <rect x="528" y="636" width="150" height="28" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.2"/>
+          <text class="d-monos" x="540" y="654" fill="var(--ink-2)">source · string</text>
+          <rect x="688" y="636" width="160" height="28" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.2"/>
+          <text class="d-monos" x="700" y="654" fill="var(--ink-2)">schemaVersion · int</text>
+          <rect x="858" y="636" width="180" height="28" rx="6" fill="var(--surface)" stroke="var(--topic-stroke)" stroke-width="1.4"/>
+          <text class="d-monos" x="870" y="654" fill="var(--topic-ink)">payload · object</text>
+        </g>
+        <text class="d-small" x="48" y="686" fill="var(--muted)">eventId is unique per message and is the idempotency key for consumers. eventTime is when the producer created the event, not when it was consumed.</text>
+        <text class="d-small" x="48" y="702" fill="var(--muted)">source names the producing component rather than the container, so quotes carry market-poller even though the poller now runs inside the Trade Executor.</text>
+      </svg>
+    </div>
+    <figcaption>Partition counts are drawn to scale. Serialisation is JSON with UTF-8 encoding, and
+    consumers ignore fields they do not recognise.</figcaption>
+  </figure>
+
+  <h2>Why these keys and these partition counts</h2>
+  <div class="prose">
+    <p>The key decides the partition, and the partition decides the ordering guarantee. Kafka orders
+    messages within a partition and gives no ordering across partitions.</p>
+    <p><code>orders</code> and <code>trade-events</code> are keyed by <code>accountId</code> because the
+    ordering that matters is per account. Two orders on the same account must execute in the order they were
+    accepted, or a sell can be processed before the buy that made it possible. Two orders on different
+    accounts have no relationship and can run in parallel.</p>
+    <p><code>market-data</code> is keyed by <code>symbol</code> because the ordering that matters is per
+    instrument. A consumer must never see an older quote for <code>AAPL</code> after a newer one. Never key
+    by order identifier: every message lands on its own partition and per-account ordering is gone.</p>
+    <p>Three partitions lets three executor instances run in one group, which is enough to demonstrate a
+    rebalance and enough to show that a group cannot usefully exceed the partition count. Six on
+    <code>market-data</code> reflects its higher message rate. Partitions can be increased later but never
+    decreased, and increasing them rehashes keys, so an account's history splits across partitions from that
+    point. Pick the number in Sprint 7 and record why.</p>
+  </div>
+
+  <h2>Producer and consumer matrix</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Component</th><th><code>orders</code></th><th><code>trade-events</code></th><th><code>market-data</code></th></tr></thead>
+      <tbody>
+        <tr><td>Trade REST API</td><td>produce</td><td>consume, to update read models</td><td>not used at the core</td></tr>
+        <tr><td>Trade Executor</td><td>consume, group <code>trade-executor</code></td><td>produce</td><td>produce, from the scheduled poller inside it</td></tr>
+        <tr><td>Analytics service</td><td>not used</td><td>consume, optional, group <code>analytics-loader</code></td><td>not used</td></tr>
+        <tr><td>Portfolio and P&amp;L module</td><td>not used</td><td>consume, group <code>portfolio-service</code></td><td>consume, group <code>portfolio-service</code></td></tr>
+        <tr><td>Watchlists and price alerts module</td><td>not used</td><td>not used</td><td>consume, group <code>watchlist-service</code></td></tr>
+        <tr><td>Customer notifications module</td><td>not used</td><td>consume, group <code>notification-service</code></td><td>not used</td></tr>
+        <tr><td>Customer preferences module</td><td>not used</td><td>not used</td><td>not used</td></tr>
+        <tr><td>Trade advice and signals module</td><td>not used</td><td>consume, group <code>advice-service</code></td><td>consume, group <code>advice-service</code></td></tr>
+        <tr><td>Automated strategy execution module</td><td>not used</td><td>consume, group <code>strategy-service</code></td><td>consume, group <code>strategy-service</code></td></tr>
+        <tr><td>Frontend</td><td>never</td><td>never</td><td>never</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>Group ids stay distinct per extension module even though the modules run in one process. A group id
+    names a logical consumer, and separate ids keep each module's offsets independent: a redeployed
+    notifications consumer must not move the watchlist consumer's position in the stream. Two consumers
+    sharing a group id split the partitions between them, and each sees only part of the stream, which
+    presents as messages going missing at random.</p>
+  </div>
+
+  <h2>Delivery semantics</h2>
+  <div class="prose">
+    <p>The platform runs at-least-once. Producers retry, consumers commit offsets after processing, and
+    duplicates therefore happen. Plan for them; do not try to eliminate them.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Setting</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><code>acks</code></td><td><code>all</code></td><td>Wait for the in-sync replicas. A local single-broker cluster makes this cheap and a real cluster makes it necessary.</td></tr>
+        <tr><td><code>enable.idempotence</code></td><td><code>true</code></td><td>Removes duplicates caused by a producer retry. It does not remove duplicates caused by an application retrying after a crash.</td></tr>
+        <tr><td><code>max.in.flight.requests.per.connection</code></td><td>5 or fewer</td><td>Keeps ordering inside a partition while a retry is outstanding.</td></tr>
+        <tr><td><code>enable.auto.commit</code></td><td><code>false</code></td><td>Commit after processing. Committing first loses the message on a crash; committing after reprocesses it, and reprocessing is survivable when the handler is idempotent.</td></tr>
+        <tr><td><code>group.id</code></td><td>explicit, per logical consumer</td><td>A default or a shared group id is the most common cause of "messages disappearing".</td></tr>
+        <tr><td><code>auto.offset.reset</code></td><td><code>earliest</code></td><td>A new consumer group reads the retained history rather than only what arrives after it starts.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>Every consumer with a side effect must survive seeing the same <code>eventId</code> twice. Two
+    mechanisms are acceptable: a processed-events table keyed on <code>eventId</code> and written inside the
+    same transaction as the side effect, or a guarded state transition. The Trade Executor uses the second,
+    and demonstrating it is the Sprint 7 acceptance check.</p>
+    <p>Kafka transactions can give exactly-once between topics. This platform does not use them, because the
+    side effects here are database writes rather than topic writes, and the guarded transition gives the same
+    outcome with less machinery. Be able to explain that choice.</p>
+  </div>
+
+  <h2>What the team owns on the broker</h2>
+  <div class="prose">
+    <ul>
+      <li>The three topics with contracted names, partition counts, replication factor and retention, plus
+      the three <code>.DLT</code> topics.</li>
+      <li>A written justification of the partition counts and the key choices, argued rather than copied.</li>
+      <li>Producer configuration, including publishing after the database commit rather than inside the
+      transaction.</li>
+      <li>Consumer configuration, including offset commit behaviour, explicit group ids and idempotent
+      handlers.</li>
+      <li>Dead-letter routing that distinguishes a malformed message from a transient failure.</li>
+    </ul>
+    <p>Local development runs plaintext with no authentication, because TLS, SASL and ACLs on a single-node
+    broker teach configuration rather than architecture. Document what you would configure in production:
+    TLS between clients and brokers, SASL for client authentication, and per-topic ACLs so that only the
+    Trade REST API can write to <code>orders</code> and only the Trade Executor can read it. Document it as
+    a plan, and do not claim it is implemented.</p>
+    <p>Never put a credential, a full name, an email address or an API key in a message payload. Topics are
+    retained for days and read by services that have no need for that data.</p>
+  </div>
+
+  <footer class="page-foot">
+    <nav aria-label="All diagrams">
+      <a href="index.html">Index</a>
+      <a href="system-block.html">System block</a>
+      <a href="hld.html">High-level design</a>
+      <a href="service-trade-api.html">Trade REST API</a>
+      <a href="service-trade-executor.html">Trade Executor</a>
+      <a href="service-auth.html">Auth service</a>
+      <a href="service-frontend.html">Frontend</a>
+      <a href="service-analytics.html">Analytics</a>
+      <a href="service-kafka.html">Kafka backbone</a>
+    </nav>
+  </footer>
+
+</div>
+</body>
+</html>
