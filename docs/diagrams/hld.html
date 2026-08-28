@@ -556,7 +556,7 @@
           <text x="219" y="380">200  ·  orderId, status NEW</text>
           <text x="719" y="410">consume orders, group trade-executor</text>
           <text x="864" y="440">GET /quotes/{symbol}</text>
-          <text x="864" y="470">price, asOf, marketState</text>
+          <text x="864" y="470">price, bid, ask, marketState</text>
           <text x="652" y="544">BEGIN; update the order; move cash; upsert the position; COMMIT</text>
           <text x="719" y="574">produce to trade-events, key accountId</text>
           <text x="506" y="604">consume trade-events, extension module groups</text>
@@ -567,7 +567,7 @@
         <g class="d-edge" fill="var(--muted)">
           <text x="410" y="217">verify the JWT signature locally</text>
           <text x="410" y="291">validate against business rules 1 to 5 in the domain package</text>
-          <text x="836" y="515">apply the fill rules against the quoted price</text>
+          <text x="836" y="515">apply the fill rules against the ask or the bid</text>
           <text x="1132" y="679" text-anchor="end">load FACT_TRADES in DuckDB</text>
         </g>
       </svg>
