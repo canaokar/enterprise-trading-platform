@@ -1,0 +1,4 @@
+boto3==1.43.89
+psycopg[binary]==3.3.5
+PyYAML==6.0.3
+cfn-lint==1.56.0

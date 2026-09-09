@@ -1,0 +1,11 @@
+[
+  {"ParameterKey": "PlatformName", "ParameterValue": "fidelity-india"},
+  {"ParameterKey": "KubernetesVersion", "ParameterValue": "REPLACE_WITH_STANDARD_SUPPORT_VERSION"},
+  {"ParameterKey": "DbEngineVersion", "ParameterValue": "REPLACE_WITH_POSTGRES_16_MINOR_VERSION"},
+  {"ParameterKey": "PlatformAdminRoleArn", "ParameterValue": "arn:aws:iam::123456789012:role/PlatformEngineer"},
+  {"ParameterKey": "ApiAccessCidr", "ParameterValue": "203.0.113.10/32"},
+  {"ParameterKey": "HostedZoneId", "ParameterValue": "REPLACE_WITH_PUBLIC_ZONE_ID"},
+  {"ParameterKey": "BaseDomain", "ParameterValue": "lab.example.com"},
+  {"ParameterKey": "WorkerCount", "ParameterValue": "2"},
+  {"ParameterKey": "CreateSecondAlb", "ParameterValue": "true"}
+]

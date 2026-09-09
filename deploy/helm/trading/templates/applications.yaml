@@ -1,0 +1,98 @@
+{{- $components := list
+  (dict "name" "trade-api" "key" "tradeApi" "port" 8080 "health" "/actuator/health" "jar" "/app/app.jar")
+  (dict "name" "trade-executor" "key" "tradeExecutor" "port" 8082 "health" "/actuator/health" "jar" "/app/trade-executor.jar")
+  (dict "name" "auth-service" "key" "auth" "port" 3000 "health" "/docs/json")
+  (dict "name" "analytics" "key" "analytics" "port" 8000 "health" "/")
+}}
+{{- range $component := $components }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $component.name }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  {{- if eq $component.key "analytics" }}
+  strategy: {type: Recreate}
+  {{- else }}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+  {{- end }}
+  selector:
+    matchLabels: {app: {{ $component.name }}}
+  template:
+    metadata:
+      labels: {app: {{ $component.name }}}
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $component.name }}
+          image: {{ required (printf "images.%s must be an immutable registry image reference" $component.key) (index $.Values.images $component.key) | quote }}
+          imagePullPolicy: IfNotPresent
+          {{- if hasKey $component "jar" }}
+          command: [java, '-XX:MaxRAMPercentage=60', '-XX:+ExitOnOutOfMemoryError', '-jar', {{ $component.jar | quote }}]
+          {{- end }}
+          ports: [{name: http, containerPort: {{ $component.port }}}]
+          envFrom: [{secretRef: {name: application-config}}]
+          env:
+            - {name: CORS_ORIGINS, value: {{ required "frontendUrl is required" $.Values.frontendUrl | quote }}}
+            - {name: DB_POOL_SIZE, value: {{ $.Values.databasePoolSize | quote }}}
+            - {name: PGPOOL_MAX, value: {{ $.Values.databasePoolSize | quote }}}
+            - {name: KAFKA_BOOTSTRAP_SERVERS, value: 'kafka:29092'}
+            - {name: FAUXNANCE_MODE, value: {{ $.Values.fauxnanceMode | quote }}}
+            {{- if $.Values.fauxnanceSecretName }}
+            - name: FAUXNANCE_API_KEY
+              valueFrom: {secretKeyRef: {name: {{ $.Values.fauxnanceSecretName }}, key: api-key}}
+            {{- end }}
+            - {name: AUTH_SEED_DEMO_USERS, value: 'true'}
+            - {name: NODE_OPTIONS, value: '--max-old-space-size=256'}
+            - {name: PGSSLMODE, value: verify-full}
+            - {name: PGSSLROOTCERT, value: /etc/rds/ca.pem}
+            - {name: DUCKDB_PATH, value: /data/warehouse.duckdb}
+            - {name: ETL_INTERVAL_SECONDS, value: '60'}
+          resources: {{ toYaml (index $.Values.resources $component.key) | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          startupProbe:
+            httpGet: {path: {{ $component.health }}, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: {{ $component.health }}, port: http}
+            periodSeconds: 10
+          # TCP liveness avoids restarting every API process during an RDS outage.
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - {name: rds-ca, mountPath: /etc/rds, readOnly: true}
+            {{- if eq $component.key "analytics" }}
+            - {name: warehouse, mountPath: /data}
+            {{- end }}
+      volumes:
+        - {name: rds-ca, configMap: {name: rds-ca}}
+        {{- if eq $component.key "analytics" }}
+        - {name: warehouse, persistentVolumeClaim: {claimName: analytics-data}}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $component.name }}
+spec:
+  type: ClusterIP
+  selector: {app: {{ $component.name }}}
+  ports: [{name: http, port: {{ $component.port }}, targetPort: http}]
+{{- end }}

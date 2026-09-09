@@ -1,0 +1,88 @@
+// Configure a separate agent identity and credential scope for each group.
+// Agent prerequisites and provisioning jobs are described in cloudformation/README.md.
+pipeline {
+  agent { label 'etp-g001' }
+  options {
+    disableConcurrentBuilds()
+    timestamps()
+    timeout(time: 60, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '10', artifactNumToKeepStr: '3'))
+  }
+  environment {
+    AWS_REGION = 'ap-south-1'
+    ENVIRONMENT_OUTPUTS = '/opt/etp/g001.outputs.json'
+    JFROG_HOST = 'REPLACE.jfrog.io'
+    IMAGE_PREFIX = 'REPLACE.jfrog.io/docker-local/g001'
+  }
+  stages {
+    stage('Checkout and tools') {
+      steps {
+        checkout scm
+        sh '''
+          set -eu
+          test -f "$ENVIRONMENT_OUTPUTS"
+          python3 -m venv .venv
+          .venv/bin/pip install -r deploy/cloudformation/requirements.txt -e './analytics[dev]'
+        '''
+      }
+    }
+    stage('Tests') {
+      steps {
+        sh '''
+          set -eu
+          mvn -B -f services/trade-api/pom.xml test
+          mvn -B -f services/trade-executor/pom.xml test
+          npm --prefix services/auth-service ci
+          npm --prefix services/auth-service test -- --runInBand
+          npm --prefix ui ci
+          npm --prefix ui test
+          .venv/bin/python -m pytest analytics/tests
+        '''
+      }
+    }
+    stage('Build and publish') {
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'jfrog-g001', usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_TOKEN')]) {
+          sh '''
+            set -eu
+            export DOCKER_CONFIG="$(mktemp -d)"
+            trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+            printf '%s' "$JFROG_TOKEN" | docker login "$JFROG_HOST" --username "$JFROG_USER" --password-stdin
+            export IMAGE_TAG="$(git rev-parse HEAD)"
+            for component in trade-api trade-executor auth-service; do
+              docker build --platform linux/amd64 --tag "$IMAGE_PREFIX/$component:$IMAGE_TAG" "services/$component"
+              docker push "$IMAGE_PREFIX/$component:$IMAGE_TAG"
+            done
+            docker build --platform linux/amd64 --tag "$IMAGE_PREFIX/analytics:$IMAGE_TAG" analytics
+            docker push "$IMAGE_PREFIX/analytics:$IMAGE_TAG"
+            .venv/bin/python - <<'PY'
+import json, os
+from pathlib import Path
+settings = json.loads(Path(os.environ['ENVIRONMENT_OUTPUTS']).read_text())
+images = {key: f"{os.environ['IMAGE_PREFIX']}/{name}:{os.environ['IMAGE_TAG']}"
+          for key, name in [('tradeApi','trade-api'), ('tradeExecutor','trade-executor'), ('auth','auth-service'), ('analytics','analytics')]}
+Path('images.json').write_text(json.dumps(images))
+config = {'production': True, 'tradeApiBaseUrl': settings['ApiUrl'], 'authApiBaseUrl': settings['AuthUrl'],
+          'orderPollIntervalMs': 2000, 'orderPollAttempts': 10}
+Path('ui/src/environments/environment.ts').write_text('export const environment = ' + json.dumps(config) + ';\\n')
+PY
+            npm --prefix ui run build
+          '''
+        }
+      }
+    }
+    stage('Release') {
+      when { branch 'main' }
+      steps {
+        sh '''
+          set -eu
+          .venv/bin/python deploy/cloudformation/release.py \
+            --region "$AWS_REGION" --outputs "$ENVIRONMENT_OUTPUTS" \
+            --images images.json --frontend ui/dist/ui/browser
+        '''
+        archiveArtifacts artifacts: 'images.json,release-record.json,ui/dist/ui/browser/**', fingerprint: true
+      }
+    }
+  }
+}

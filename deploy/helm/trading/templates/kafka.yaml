@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector: {matchLabels: {app: kafka}}
+  template:
+    metadata: {labels: {app: kafka}}
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: kafka
+          image: {{ .Values.images.kafka | quote }}
+          ports: [{name: broker, containerPort: 29092}, {name: controller, containerPort: 29093}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources: {{ toYaml .Values.resources.kafka | nindent 12 }}
+          env:
+            - {name: KAFKA_NODE_ID, value: '1'}
+            - {name: KAFKA_PROCESS_ROLES, value: 'broker,controller'}
+            - {name: KAFKA_LISTENERS, value: 'PLAINTEXT://:29092,CONTROLLER://:29093'}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: 'PLAINTEXT://kafka:29092'}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: '1@kafka-0.kafka:29093'}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: PLAINTEXT}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: '1'}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: '1'}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: '1'}
+            - {name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: 'false'}
+            - {name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data/logs}
+            - {name: KAFKA_HEAP_OPTS, value: '-Xms256m -Xmx512m'}
+            - {name: CLUSTER_ID, value: MkU3OEVBNTcwNTJENDM2Qk}
+          startupProbe:
+            tcpSocket: {port: broker}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe: {tcpSocket: {port: broker}, periodSeconds: 10}
+          livenessProbe: {tcpSocket: {port: broker}, periodSeconds: 20, failureThreshold: 6}
+          volumeMounts: [{name: data, mountPath: /var/lib/kafka/data}]
+      volumes: [{name: data, persistentVolumeClaim: {claimName: kafka-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: kafka}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: {app: kafka}
+  ports: [{name: broker, port: 29092}, {name: controller, port: 29093}]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: topics-{{ .Release.Revision }}
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: create-topics
+          image: {{ .Values.images.kafka | quote }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: '1', memory: 512Mi}}
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              tool=/opt/kafka/bin/kafka-topics.sh
+              until "$tool" --bootstrap-server kafka:29092 --list; do sleep 5; done
+              create() {
+                "$tool" --bootstrap-server kafka:29092 --create --if-not-exists \
+                  --topic "$1" --partitions "$2" --replication-factor 1 --config "retention.ms=$3"
+              }
+              create orders 3 604800000
+              create orders.DLT 3 604800000
+              create trade-events 3 2592000000
+              create trade-events.DLT 3 2592000000
+              create market-data 6 86400000
+              create market-data.DLT 6 86400000

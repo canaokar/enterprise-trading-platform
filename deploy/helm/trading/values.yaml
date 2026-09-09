@@ -1,0 +1,28 @@
+# These are pilot settings. Measure memory, connections and concurrent startup before class.
+images:
+  tradeApi: ''
+  tradeExecutor: ''
+  auth: ''
+  analytics: ''
+  kafka: apache/kafka:3.8.0
+imagePullSecrets: []
+frontendUrl: ''
+fauxnanceMode: fixture
+fauxnanceSecretName: ''
+databasePoolSize: 3
+resources:
+  tradeApi:
+    requests: {cpu: 250m, memory: 768Mi}
+    limits: {cpu: '2', memory: 1280Mi}
+  tradeExecutor:
+    requests: {cpu: 250m, memory: 768Mi}
+    limits: {cpu: '2', memory: 1280Mi}
+  auth:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: '1', memory: 512Mi}
+  analytics:
+    requests: {cpu: 100m, memory: 512Mi}
+    limits: {cpu: '1', memory: 1Gi}
+  kafka:
+    requests: {cpu: 250m, memory: 768Mi}
+    limits: {cpu: '2', memory: 1280Mi}
