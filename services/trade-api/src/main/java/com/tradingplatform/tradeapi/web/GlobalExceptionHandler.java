@@ -11,6 +11,7 @@ import com.tradingplatform.domain.exception.OrderNotCancellableException;
 import com.tradingplatform.domain.exception.OrderNotFoundException;
 import com.tradingplatform.domain.exception.TradingException;
 import com.tradingplatform.tradeapi.security.AccountAccessDeniedException;
+import com.tradingplatform.tradeapi.extensions.ExtensionException;
 import com.tradingplatform.tradeapi.security.InvalidTokenException;
 import com.tradingplatform.tradeapi.service.ConcurrentUpdateException;
 import com.tradingplatform.tradeapi.web.dto.ErrorResponse;
@@ -216,6 +217,11 @@ public class GlobalExceptionHandler {
         log.error("Unhandled exception", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse("INTERNAL", "Internal error"));
+    }
+
+    @ExceptionHandler(ExtensionException.class)
+    public ResponseEntity<ErrorResponse> handleExtension(ExtensionException e) {
+        return ResponseEntity.status(e.status()).body(new ErrorResponse(e.errorCode(), e.getMessage()));
     }
 
     private static ResponseEntity<ErrorResponse> envelope(HttpStatus status, TradingException e) {

@@ -232,6 +232,18 @@ Each edit below was made in a pass of its own, after this specification was writ
 
 **`docs/WRITING_STYLE.md`.** The fixed-terms table had defined Extension as "a Sprint 10 team-selected microservice" and banned "module" as a synonym. Extension is now defined as a Sprint 10 team-selected capability built as a module inside the Trade REST API, and "module" is out of the banned column.
 
+**`extensions/README.md`.** Missed in the original pass and corrected later. The
+paragraph defining an extension as "a separate deployable service, not a module bolted
+onto the Trade REST API", with its own port and its own security boundary, was replaced
+by the module definition used everywhere else, with the security boundary restated as
+the route. The opening paragraph no longer lists the market-data poller as a component
+of its own. The Portfolio and P&L row now records that `extensions/portfolio-pnl/`
+moves into a package of the Trade REST API during the reference rebuild. In "Shared
+expectations", the JWT-verification bullet became route-level authorisation, the
+consumer-group bullet gained the reason distinct group ids still matter inside one
+process, and the per-extension Dockerfile requirement was dropped. Extension names were
+aligned with the capitalisation used in `CURRICULUM_MAP.md`.
+
 **`docker-compose.yml`.** The `kafka-init`, `market-data-poller` and `portfolio-service` services were deleted, along with the `kafka-init` entries in the `depends_on` blocks of `trade-api` and `trade-executor`. `FAUXNANCE_BASE_URL`, `FAUXNANCE_API_KEY` and `POLL_INTERVAL_SECONDS` all sit on `trade-executor`. The header comment, which lists the services the `platform` profile starts, was rewritten. `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"` stayed, with a one-line comment saying the topics are created by the team.
 
 **`infra/kafka/create-topics.sh`.** Deleted, on `reference`, `main` and both student branches. On `us-ireland` an empty file appears at `sprint-07-event-backbone/scripts/create-topics.sh` instead; on `india` no file replaced it.

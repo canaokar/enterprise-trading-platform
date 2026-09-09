@@ -1,0 +1,29 @@
+<main class="page narrow-page">
+  <header class="page-header">
+    <div><h1>Preferences</h1><p class="muted small">Choose how this demo records delivery and displays values.</p></div>
+  </header>
+
+  @if (error(); as message) { <div class="alert alert-error" role="alert">{{ message }}</div> }
+  @if (saved()) { <div class="alert alert-success">Preferences saved.</div> }
+
+  <form class="card" [formGroup]="form" (ngSubmit)="save()">
+    <div class="field">
+      <label for="channel">Notification channel</label>
+      <select id="channel" formControlName="channel">
+        <option value="IN_APP">In app</option><option value="EMAIL">Email</option><option value="SMS">SMS</option><option value="PUSH">Push</option>
+      </select>
+      <span class="field-hint">No external message is sent; the resolved channel is recorded in the inbox.</span>
+    </div>
+    <div class="field">
+      <label for="currency">Display currency</label>
+      <input id="currency" formControlName="currency" maxlength="3" />
+      @if (form.controls.currency.touched && form.controls.currency.invalid) { <span class="field-error">Use a three-letter currency code.</span> }
+    </div>
+    <div class="field">
+      <label for="theme">Theme preference</label>
+      <select id="theme" formControlName="theme"><option value="SYSTEM">System</option><option value="LIGHT">Light</option><option value="DARK">Dark</option></select>
+    </div>
+    <button type="submit" [disabled]="saving() || loading()">{{ saving() ? 'Saving…' : 'Save preferences' }}</button>
+    @if (preference(); as current) { <p class="muted small">Last updated {{ current.updatedOn | date: 'medium' }}</p> }
+  </form>
+</main>

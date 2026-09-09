@@ -1,0 +1,111 @@
+.terminal-header {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 2rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid #263348;
+  background: #0c1424;
+  color: #dce5f1;
+}
+
+.brand {
+  display: inline-flex;
+  gap: 0.65rem;
+  align-items: center;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 7px;
+  background: #2563eb;
+}
+
+nav,
+.header-account {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+nav a,
+.header-account a,
+.header-account button {
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #a9b6c8;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+nav a:hover,
+nav a.active,
+.header-account a:hover,
+.header-account a.active,
+.header-account button:hover {
+  background: #17233a;
+  color: #fff;
+}
+
+.header-account span {
+  margin-left: 0.5rem;
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+.header-account button {
+  cursor: pointer;
+}
+
+.status-ribbon {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 0.22rem 1.5rem;
+  border-bottom: 1px solid #e2e7ee;
+  background: #fff;
+  color: #647184;
+  font-size: 0.7rem;
+}
+
+.status-ribbon i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: #16a36a;
+}
+
+@media (max-width: 850px) {
+  .terminal-header {
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+  }
+
+  .terminal-header nav {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    overflow-x: auto;
+  }
+
+  .header-account a,
+  .header-account span {
+    display: none;
+  }
+}

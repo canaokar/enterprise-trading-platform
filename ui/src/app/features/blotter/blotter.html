@@ -4,10 +4,7 @@
       <h1>Order history</h1>
       <p class="muted small">Every order on this account, newest first, including rejections.</p>
     </div>
-    <div class="button-row">
-      <a class="button" routerLink="/orders/new">Place an order</a>
-      <a class="button secondary" routerLink="/dashboard">Dashboard</a>
-    </div>
+    <a class="button" routerLink="/orders/new">Place an order</a>
   </header>
 
   @if (error(); as message) {

@@ -1,14 +1,6 @@
 # Enterprise Trading Platform, local infrastructure and services.
 #
-# `docker compose up` on its own starts infrastructure only: postgres and
-# kafka. That is deliberate. Sprint 3 and Sprint 7 work against a database
-# and a broker before any service exists to put in front of them.
-#
-# `docker compose --profile platform up` starts everything: the two
-# infrastructure services plus the Trade REST API, the auth service, the
-# auth stub and the Trade Executor. Six containers in total. See
-# infra/README.md for what each one needs, which ports they listen on, and
-# how to bring up a partial stack for one sprint's work.
+# `docker compose up --build` starts the complete seeded reference platform.
 #
 # Environment variables are read from .env at the repository root. Copy
 # .env.example to .env before running anything here.
@@ -20,6 +12,7 @@ networks:
 volumes:
   postgres-data:
   kafka-data:
+  analytics-data:
 
 services:
 
@@ -47,6 +40,24 @@ services:
       retries: 10
       start_period: 10s
     restart: unless-stopped
+
+  db-init:
+    image: postgres:16
+    container_name: db-init
+    networks: [trading-net]
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-trading}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
+    volumes:
+      - ./infra/postgres:/migrations:ro
+    entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/migrations/03-extensions.sql"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   # Single-broker Kafka in KRaft mode: combined broker and controller, no
   # ZooKeeper. 9092 is the address the host and any tool outside compose
@@ -85,21 +96,28 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  kafka-init:
+    image: apache/kafka:3.8.0
+    container_name: kafka-init
+    networks: [trading-net]
+    volumes:
+      - ./infra/kafka/create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["bash", "/create-topics.sh"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+
   # ---------------------------------------------------------------------------
-  # Platform services. Profile "platform": included only when asked for.
-  #
-  # Build contexts point at services/ directories owned by other tracks of
-  # this build and are not present at the time this compose file was
-  # written. `docker compose config` validates the file's shape
-  # without needing the contexts to exist; `docker compose --profile
-  # platform up` needs them present with a Dockerfile before it can build.
+  # Platform services.
   # ---------------------------------------------------------------------------
 
   trade-api:
     build:
       context: ./services/trade-api
     container_name: trade-api
-    profiles: [platform]
     networks: [trading-net]
     ports:
       - "8080:8080"
@@ -113,14 +131,19 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-this-secret-is-not-for-production-use}
+      CORS_ORIGINS: http://localhost:4200
     depends_on:
       postgres:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8080' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -135,7 +158,6 @@ services:
     build:
       context: ./services/auth-service
     container_name: auth-service
-    profiles: [platform]
     networks: [trading-net]
     ports:
       - "3000:3000"
@@ -152,7 +174,10 @@ services:
       DB_NAME: ${POSTGRES_DB:-trading}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-this-secret-is-not-for-production-use}
+      AUTH_RUN_MIGRATIONS: "true"
+      AUTH_SEED_DEMO_USERS: "true"
+      CORS_ORIGINS: http://localhost:4200
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,13 +199,13 @@ services:
     build:
       context: ./services/auth-stub
     container_name: auth-stub
-    profiles: [platform]
+    profiles: [stub]
     networks: [trading-net]
     ports:
       - "3001:3001"
     environment:
       PORT: 3001
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-this-secret-is-not-for-production-use}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/3001' || exit 1"]
       interval: 10s
@@ -199,7 +224,6 @@ services:
     build:
       context: ./services/trade-executor
     container_name: trade-executor
-    profiles: [platform]
     networks: [trading-net]
     ports:
       - "8082:8082"
@@ -215,18 +239,75 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       KAFKA_CONSUMER_GROUP: trade-executor
-      FAUXNANCE_BASE_URL: ${FAUXNANCE_BASE_URL}
-      FAUXNANCE_API_KEY: ${FAUXNANCE_API_KEY}
+      FAUXNANCE_MODE: ${FAUXNANCE_MODE:-fixture}
+      FAUXNANCE_BASE_URL: ${FAUXNANCE_BASE_URL:-https://y4t9nq2bqf.execute-api.eu-west-2.amazonaws.com/v1}
+      FAUXNANCE_API_KEY: ${FAUXNANCE_API_KEY:-}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
     depends_on:
       postgres:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8082' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8082/actuator/health >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
+    restart: unless-stopped
+
+  analytics:
+    build:
+      context: ./analytics
+    container_name: analytics
+    networks: [trading-net]
+    ports:
+      - "8000:8000"
+    environment:
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: ${POSTGRES_DB:-trading}
+      PG_USER: ${POSTGRES_USER:-postgres}
+      PG_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
+      DUCKDB_PATH: /data/warehouse.duckdb
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      FAUXNANCE_API_KEY: ${FAUXNANCE_API_KEY:-}
+      ETL_INTERVAL_SECONDS: ${ETL_INTERVAL_SECONDS:-60}
+    volumes:
+      - analytics-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/', method='HEAD'), timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./ui
+    container_name: ui
+    networks: [trading-net]
+    ports:
+      - "4200:80"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      trade-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped

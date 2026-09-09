@@ -1,0 +1,111 @@
+openapi: 3.0.3
+info:
+  title: Customer Preferences API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/preferences/{accountId}:
+    get:
+      operationId: getPreferences
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Current preferences
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preference' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/preferences/{accountId}/notifications:
+    get:
+      operationId: getNotificationPreference
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Notification channel
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accountId, channel]
+                properties:
+                  accountId: { type: integer, format: int64 }
+                  channel: { $ref: '#/components/schemas/Channel' }
+    put:
+      operationId: updateNotificationPreference
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { $ref: '#/components/schemas/Channel' }
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preference' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/preferences/{accountId}/display:
+    put:
+      operationId: updateDisplayPreference
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currency, theme]
+              properties:
+                currency: { type: string, pattern: '^[A-Z]{3}$' }
+                theme: { type: string, enum: [LIGHT, DARK, SYSTEM] }
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preference' }
+        '422': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+  schemas:
+    Channel: { type: string, enum: [IN_APP, EMAIL, SMS, PUSH] }
+    Preference:
+      type: object
+      required: [accountId, notificationChannel, displayCurrency, theme, updatedOn]
+      properties:
+        accountId: { type: integer, format: int64 }
+        notificationChannel: { $ref: '#/components/schemas/Channel' }
+        displayCurrency: { type: string }
+        theme: { type: string, enum: [LIGHT, DARK, SYSTEM] }
+        updatedOn: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [errorCode, message]
+      properties:
+        errorCode: { type: string }
+        message: { type: string }
+  responses:
+    Error:
+      description: Platform error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

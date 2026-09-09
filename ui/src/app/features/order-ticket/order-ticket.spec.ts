@@ -10,6 +10,7 @@ import {
 } from '../../core/models/trade-api';
 import { AccountService } from '../../core/services/account-service';
 import { AuthService } from '../../core/services/auth-service';
+import { ExtensionService } from '../../core/services/extension-service';
 import { OrderService } from '../../core/services/order-service';
 import { OrderTicket } from './order-ticket';
 
@@ -22,6 +23,19 @@ const ACCOUNT: AccountResponse = {
   version: 7,
   lastUpdated: '2026-09-28T09:14:22Z',
 };
+
+const QUOTES = [
+  {
+    symbol: 'AAPL',
+    price: 232.71,
+    currency: 'USD',
+    quoteAsOf: '2026-09-28T09:14:22Z',
+    stale: false,
+    marketState: 'open',
+    feedMode: 'fixture' as const,
+    receivedOn: '2026-09-28T09:14:23Z',
+  },
+];
 
 function accepted(status: OrderResponse['status'] = 'NEW'): OrderResponse {
   return {
@@ -76,6 +90,7 @@ describe('OrderTicket', () => {
         { provide: OrderService, useValue: orders },
         { provide: AccountService, useValue: { getAccount: () => of(ACCOUNT) } },
         { provide: AuthService, useValue: { requireAccountId: () => of(1) } },
+        { provide: ExtensionService, useValue: { getMarketQuotes: () => of(QUOTES) } },
       ],
     }).compileComponents();
 
@@ -92,6 +107,11 @@ describe('OrderTicket', () => {
     const field = host.querySelector<HTMLInputElement>('[data-testid="account-field"]');
     expect(field?.readOnly).toBe(true);
     expect(field?.value).toContain('Priya Menon');
+  });
+
+  it('loads the selected market price into the ticket', () => {
+    expect(component.selectedQuote()?.symbol).toBe('AAPL');
+    expect(component.form.controls.price.value).toBe(232.71);
   });
 
   describe('validation, mirroring business rules 4 and 5', () => {

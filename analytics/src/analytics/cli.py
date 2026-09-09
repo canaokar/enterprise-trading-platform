@@ -99,12 +99,22 @@ def kafka_sink_main(argv: list[str] | None = None) -> int:
         default=None,
         help="Stop after this many messages. Omit to run until interrupted.",
     )
+    parser.add_argument(
+        "--idle-timeout-ms",
+        type=int,
+        default=None,
+        help="Stop after this long without a message.",
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
     from analytics.kafka_sink.consumer import run_consumer
 
-    run_consumer(settings, max_messages=args.max_messages)
+    run_consumer(
+        settings,
+        max_messages=args.max_messages,
+        idle_timeout_ms=args.idle_timeout_ms,
+    )
     return 0
 
 

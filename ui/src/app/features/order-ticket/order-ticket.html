@@ -1,9 +1,8 @@
 <main class="page ticket-page">
   <header class="page-header">
-    <h1>Order ticket</h1>
-    <div class="button-row">
-      <a class="button secondary" routerLink="/dashboard">Dashboard</a>
-      <a class="button secondary" routerLink="/orders">Order history</a>
+    <div>
+      <h1>Trade</h1>
+      <p class="muted small">Select a market and place a limit order.</p>
     </div>
   </header>
 
@@ -13,33 +12,46 @@
     </div>
   }
 
-  <section class="card">
-    <h2>Account</h2>
-    <div class="field">
-      <label for="account">Trading account</label>
-      <input
-        id="account"
-        type="text"
-        readonly
-        data-testid="account-field"
-        [value]="account() ? account()!.holderName + ' (' + account()!.accountId + ')' : 'Loading'"
-      />
-      <p class="field-hint">
-        Read-only. The account comes from your signed-in session. The Trade REST API rejects an
-        order whose account does not match the token's <code>accountId</code> claim.
-      </p>
+  <section class="card market-board" aria-live="polite">
+    <div class="market-heading">
+      <div>
+        <h2>Market prices</h2>
+        <p>Delayed quotes · refreshes every 15 seconds</p>
+      </div>
+      @if (feedMode(); as mode) {
+        <span class="feed-badge" [class.feed-live]="mode === 'live'">
+          {{ mode === 'live' ? 'LIVE FEED' : 'DEMO FEED' }}
+        </span>
+      }
     </div>
-    @if (account(); as detail) {
-      <p class="muted small">
-        Available cash <span class="numeric">{{ detail.cashBalance | number: '1.2-2' }}</span
-        >. A buy costing more than this is rejected with ORD-400.
-      </p>
+    @if (quotes().length) {
+      <div class="quote-strip">
+        @for (quote of quotes(); track quote.symbol) {
+          <button
+            type="button"
+            class="quote-tile"
+            [class.selected]="quote.symbol === selectedSymbol()"
+            (click)="selectQuote(quote)"
+          >
+            <span class="quote-symbol">{{ quote.symbol }}</span>
+            <strong class="numeric">{{ quote.price | currency: quote.currency }}</strong>
+            <span class="quote-state" [class.stale]="quote.stale">
+              {{ quote.stale ? 'Stale' : quote.marketState }}
+            </span>
+          </button>
+        }
+      </div>
+    } @else if (marketError()) {
+      <p class="market-message">{{ marketError() }}</p>
+    } @else {
+      <p class="market-message">Loading market prices…</p>
     }
   </section>
 
-  <section class="card">
-    <h2>New order</h2>
-    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <div class="ticket-layout">
+    <section class="card order-card">
+      <h2>New order</h2>
+      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
       <div class="ticket-grid">
         <div class="field">
           <label for="symbol">Symbol</label>
@@ -135,8 +147,57 @@
           </button>
         }
       </div>
-    </form>
-  </section>
+      </form>
+    </section>
+
+    <aside class="ticket-sidebar">
+      <section class="card account-card">
+        <h2>Account</h2>
+        <div class="field compact-field">
+          <label for="account">Trading account</label>
+          <input
+            id="account"
+            type="text"
+            readonly
+            data-testid="account-field"
+            [value]="account() ? account()!.holderName + ' (' + account()!.accountId + ')' : 'Loading'"
+          />
+        </div>
+        @if (account(); as detail) {
+          <dl class="account-summary">
+            <div>
+              <dt>Buying power</dt>
+              <dd class="numeric">{{ detail.cashBalance | currency: 'USD' }}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{{ detail.status }}</dd>
+            </div>
+          </dl>
+        }
+      </section>
+
+      <section class="card selected-market">
+        <h2>Selected market</h2>
+        @if (selectedQuote(); as quote) {
+          <div class="selected-price">
+            <span>{{ quote.symbol }}</span>
+            <strong class="numeric">{{ quote.price | currency: quote.currency }}</strong>
+          </div>
+          <dl class="quote-detail">
+            <div><dt>Market</dt><dd>{{ quote.marketState }}</dd></div>
+            <div><dt>As of</dt><dd>{{ quote.quoteAsOf | date: 'mediumTime' }}</dd></div>
+            <div><dt>Freshness</dt><dd>{{ quote.stale ? 'Stale' : 'Current' }}</dd></div>
+          </dl>
+          <button type="button" class="secondary use-price" (click)="useMarketPrice()">
+            Use market price
+          </button>
+        } @else {
+          <p class="muted small">Enter or select a quoted symbol.</p>
+        }
+      </section>
+    </aside>
+  </div>
 
   @if (placed(); as order) {
     <section
@@ -150,9 +211,8 @@
           <div class="alert alert-pending">
             <h3>Order accepted, status NEW</h3>
             <p>
-              The Trade REST API has recorded {{ order.orderId }} and published it to the
-              <code>orders</code> topic. The Trade Executor prices it against a live quote and
-              writes the fill. Checking order history until the status changes.
+              Order {{ order.orderId }} is awaiting execution against the latest market quote.
+              Checking its status now.
             </p>
           </div>
         }

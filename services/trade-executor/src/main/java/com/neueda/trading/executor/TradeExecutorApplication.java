@@ -7,12 +7,14 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * The Trade Executor is the execution venue. No broker simulator exists: this service consumes
  * accepted orders, prices them against the Fauxnance API, and settles them in Postgres.
  */
 @SpringBootApplication
+@EnableScheduling
 @EnableConfigurationProperties({ExecutorProperties.class, FauxnanceProperties.class})
 public class TradeExecutorApplication {
 

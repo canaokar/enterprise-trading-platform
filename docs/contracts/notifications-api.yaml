@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: Customer Notifications API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/notifications/{accountId}:
+    get:
+      operationId: listNotifications
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Newest notifications first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/notifications/{accountId}/read:
+    post:
+      operationId: markNotificationsRead
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Number marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated]
+                properties:
+                  updated: { type: integer, minimum: 0 }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+  schemas:
+    Notification:
+      type: object
+      required: [id, accountId, type, channel, subject, message, deliveryState, createdOn]
+      properties:
+        id: { type: string, format: uuid }
+        accountId: { type: integer, format: int64 }
+        type: { type: string, enum: [ORDER_FILLED, ORDER_REJECTED, ORDER_CANCELLED, PRICE_ALERT_TRIGGERED] }
+        channel: { type: string, enum: [IN_APP, EMAIL, SMS, PUSH] }
+        subject: { type: string }
+        message: { type: string }
+        deliveryState: { type: string, enum: [SENT] }
+        readOn: { type: string, format: date-time, nullable: true }
+        createdOn: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [errorCode, message]
+      properties:
+        errorCode: { type: string }
+        message: { type: string }
+  responses:
+    Error:
+      description: Platform error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

@@ -1,0 +1,70 @@
+<main class="page">
+  <header class="page-header">
+    <div><h1>Watchlists and price alerts</h1><p class="muted small">Prices refresh automatically through Kafka.</p></div>
+  </header>
+
+  @if (error(); as message) { <div class="alert alert-error" role="alert">{{ message }}</div> }
+
+  <section class="split">
+    <div class="card">
+      <h2>Watchlist</h2>
+      <div class="field">
+        <label for="watchlist">Select watchlist</label>
+        <select id="watchlist" (change)="select($any($event.target).value)">
+          @for (list of watchlists(); track list.id) { <option [value]="list.id" [selected]="selected()?.id === list.id">{{ list.name }} ({{ list.instrumentCount }})</option> }
+        </select>
+      </div>
+      <form class="inline-form" [formGroup]="newListForm" (ngSubmit)="createWatchlist()">
+        <div class="field"><label for="list-name">New watchlist</label><input id="list-name" formControlName="name" placeholder="Long-term picks" /></div>
+        <button type="submit" [disabled]="newListForm.invalid">Create</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Add symbol</h2>
+      <form class="inline-form" [formGroup]="instrumentForm" (ngSubmit)="addInstrument()">
+        <div class="field"><label for="symbol">Instrument</label><input id="symbol" formControlName="symbol" placeholder="MSFT" /></div>
+        <button type="submit" [disabled]="!selected() || instrumentForm.invalid">Add</button>
+      </form>
+      <p class="muted small">Use one of the seeded instruments: AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, JPM or SPY.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>{{ selected()?.name ?? 'Current prices' }}</h2>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th>Symbol</th><th class="right">Price</th><th>Freshness</th><th>Quoted</th><th></th></tr></thead>
+        <tbody>
+          @for (entry of selected()?.instruments ?? []; track entry.symbol) {
+            <tr><td><strong>{{ entry.symbol }}</strong></td><td class="right numeric">{{ entry.price == null ? 'Unavailable' : (entry.price | currency: (entry.currency ?? 'USD')) }}</td><td>{{ entry.price == null ? 'Missing' : entry.stale ? 'Stale' : 'Current' }}</td><td>{{ entry.quoteAsOf ? (entry.quoteAsOf | date: 'medium') : '—' }}</td><td class="right"><button class="secondary" type="button" (click)="removeInstrument(entry.symbol)">Remove</button></td></tr>
+          } @empty { <tr><td colspan="5" class="empty">{{ loading() ? 'Loading' : 'No symbols in this watchlist' }}</td></tr> }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="split alert-section">
+    <form class="card" [formGroup]="alertForm" (ngSubmit)="createAlert()">
+      <h2>Create price alert</h2>
+      <div class="field"><label for="alert-symbol">Symbol</label><input id="alert-symbol" formControlName="symbol" /></div>
+      <div class="field"><label for="direction">Trigger when price is</label><select id="direction" formControlName="direction"><option value="ABOVE">Above or equal to</option><option value="BELOW">Below or equal to</option></select></div>
+      <div class="field"><label for="threshold">Threshold</label><input id="threshold" type="number" step="0.01" formControlName="threshold" /></div>
+      <button type="submit" [disabled]="alertForm.invalid">Create alert</button>
+    </form>
+
+    <div class="card">
+      <h2>Alert history</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Rule</th><th>Status</th><th>Triggered</th><th></th></tr></thead>
+          <tbody>
+            @for (alert of alerts(); track alert.id) {
+              <tr><td>{{ alert.symbol }} {{ alert.direction.toLowerCase() }} {{ alert.threshold | currency: 'USD' }}</td><td><span class="badge" [class.badge-filled]="alert.status === 'TRIGGERED'" [class.badge-new]="alert.status === 'ACTIVE'" [class.badge-cancelled]="alert.status === 'DISABLED'">{{ alert.status }}</span></td><td>{{ alert.triggeredOn ? (alert.triggeredOn | date: 'medium') : '—' }}</td><td class="right">@if (alert.status === 'ACTIVE') { <button type="button" class="secondary" (click)="disableAlert(alert.id)">Disable</button> }</td></tr>
+            } @empty { <tr><td colspan="4" class="empty">No alerts yet</td></tr> }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>

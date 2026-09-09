@@ -1,5 +1,109 @@
 .ticket-page {
-  max-width: 760px;
+  max-width: 1120px;
+}
+
+.market-board {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border-color: #263348;
+  background: #0f192b;
+  color: #f4f7fb;
+}
+
+.market-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin-bottom: var(--space-3);
+}
+
+.market-heading h2,
+.market-heading p {
+  margin: 0;
+}
+
+.market-heading p {
+  color: #9cacbf;
+  font-size: 0.8125rem;
+}
+
+.feed-badge {
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  background: var(--colour-warn-soft);
+  color: var(--colour-warn);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.feed-badge.feed-live {
+  background: var(--colour-buy-soft);
+  color: var(--colour-buy);
+}
+
+.quote-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-2);
+}
+
+button.quote-tile {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0;
+  padding: var(--space-3);
+  border-color: #2b3a51;
+  background: #162238;
+  color: #f4f7fb;
+  text-align: left;
+}
+
+button.quote-tile:hover,
+button.quote-tile.selected {
+  border-color: #5c8ff5;
+  background: #1d3154;
+}
+
+.quote-symbol {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.quote-tile strong {
+  font-size: 1.05rem;
+}
+
+.quote-state {
+  color: #45d49c;
+  font-size: 0.7rem;
+  text-transform: capitalize;
+}
+
+.quote-state.stale {
+  color: var(--colour-warn);
+}
+
+.market-message {
+  margin: 0;
+  color: var(--colour-text-muted);
+}
+
+.ticket-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.ticket-sidebar {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.ticket-sidebar .card + .card {
+  margin-top: 0;
 }
 
 /* Two columns on a desktop, one on a narrow screen, without a media query. */
@@ -7,6 +111,56 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0 var(--space-4);
+}
+
+.compact-field {
+  margin-bottom: var(--space-3);
+}
+
+.account-summary,
+.quote-detail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.account-summary dt,
+.quote-detail dt {
+  color: var(--colour-text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.account-summary dd,
+.quote-detail dd {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.selected-price {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--colour-border);
+}
+
+.selected-price span {
+  font-weight: 700;
+}
+
+.selected-price strong {
+  font-size: 1.35rem;
+}
+
+.use-price {
+  width: 100%;
+  margin-top: var(--space-4);
 }
 
 .result-detail {
@@ -31,4 +185,14 @@
 code {
   font-family: var(--font-numeric);
   font-size: 0.9em;
+}
+
+@media (max-width: 760px) {
+  .ticket-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-sidebar {
+    grid-row: 1;
+  }
 }

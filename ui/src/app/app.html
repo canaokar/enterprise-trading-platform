@@ -1,1 +1,26 @@
+@if (auth.isAuthenticated()) {
+  <header class="terminal-header">
+    <a class="brand" routerLink="/dashboard">
+      <span class="brand-mark">T</span>
+      <span>TradeStack</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a routerLink="/dashboard" routerLinkActive="active">Overview</a>
+      <a routerLink="/orders/new" routerLinkActive="active">Trade</a>
+      <a routerLink="/orders" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Orders</a>
+      <a routerLink="/portfolio" routerLinkActive="active">Portfolio</a>
+      <a routerLink="/watchlists" routerLinkActive="active">Markets</a>
+    </nav>
+    <div class="header-account">
+      <a routerLink="/notifications" routerLinkActive="active">Alerts</a>
+      <a routerLink="/preferences" routerLinkActive="active">Settings</a>
+      <span>{{ auth.username() }}</span>
+      <button type="button" (click)="logout()">Log out</button>
+    </div>
+  </header>
+  <div class="status-ribbon">
+    <span><i></i> Platform online</span>
+    <span>Delayed market data</span>
+  </div>
+}
 <router-outlet />

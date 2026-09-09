@@ -1,0 +1,66 @@
+<main class="page">
+  <header class="page-header">
+    <div>
+      <h1>Portfolio and P&amp;L</h1>
+      <p class="muted small">Current valuation from the latest market-data quotes.</p>
+    </div>
+  </header>
+
+  @if (error(); as message) {
+    <div class="alert alert-error" role="alert">{{ message }}</div>
+  }
+
+  @if (summary(); as total) {
+    @if (total.partial) {
+      <div class="alert alert-pending">Some holdings have no current price, so totals are partial.</div>
+    }
+    <section class="summary-grid">
+      <div class="card metric"><span class="muted small">Total value</span><strong>{{ total.totalValue | currency: total.baseCurrency }}</strong></div>
+      <div class="card metric"><span class="muted small">Cash</span><strong>{{ total.cashBalance | currency: total.baseCurrency }}</strong></div>
+      <div class="card metric"><span class="muted small">Market value</span><strong>{{ total.marketValue | currency: total.baseCurrency }}</strong></div>
+      <div class="card metric"><span class="muted small">Unrealised P&amp;L</span><strong>{{ total.unrealisedPnl | currency: total.baseCurrency }}</strong></div>
+      <div class="card metric"><span class="muted small">Realised P&amp;L</span><strong>{{ total.realisedPnl | currency: total.baseCurrency }}</strong></div>
+    </section>
+  }
+
+  <section class="card">
+    <h2>Priced positions</h2>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th>Symbol</th><th class="right">Units</th><th class="right">Average cost</th><th class="right">Last price</th><th class="right">Market value</th><th class="right">Unrealised P&amp;L</th><th>Price status</th></tr></thead>
+        <tbody>
+          @for (position of positions(); track position.symbol) {
+            <tr>
+              <td><strong>{{ position.symbol }}</strong></td>
+              <td class="right numeric">{{ position.quantity | number }}</td>
+              <td class="right numeric">{{ position.averageCost | currency: position.currency }}</td>
+              <td class="right numeric">{{ position.lastPrice == null ? 'Unavailable' : (position.lastPrice | currency: position.currency) }}</td>
+              <td class="right numeric">{{ position.marketValue == null ? '—' : (position.marketValue | currency: position.currency) }}</td>
+              <td class="right numeric">{{ position.unrealisedPnl == null ? '—' : (position.unrealisedPnl | currency: position.currency) }}</td>
+              <td>{{ position.lastPrice == null ? 'Missing' : position.stale ? 'Stale' : 'Current' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="7" class="empty">{{ loading() ? 'Loading' : 'No open positions' }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Profit and loss by symbol</h2>
+    @if (pnl(); as detail) {
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Symbol</th><th class="right">Realised</th><th class="right">Unrealised</th><th class="right">Total</th></tr></thead>
+          <tbody>
+            @for (row of detail.bySymbol; track row.symbol) {
+              <tr><td><strong>{{ row.symbol }}</strong></td><td class="right numeric">{{ row.realisedPnl | currency: detail.baseCurrency }}</td><td class="right numeric">{{ row.unrealisedPnl | currency: detail.baseCurrency }}</td><td class="right numeric">{{ row.totalPnl | currency: detail.baseCurrency }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small">As at {{ detail.asOf | date: 'medium' }}</p>
+    }
+  </section>
+</main>

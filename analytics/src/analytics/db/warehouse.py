@@ -1,9 +1,4 @@
-"""The DuckDB warehouse connection.
-
-DuckDB is the Snowflake stand-in (docs/DECISIONS.md, resolved contradictions
-table). One file, no server, and the same ANSI SQL in
-docs/contracts/analytics-schema.sql runs unchanged.
-"""
+"""The embedded DuckDB warehouse connection."""
 
 from __future__ import annotations
 
@@ -34,9 +29,8 @@ def apply_schema(conn: duckdb.DuckDBPyConnection) -> None:
 def next_surrogate_key(conn: duckdb.DuckDBPyConnection, table: str, key_column: str) -> int:
     """Return the next surrogate key for `table`.
 
-    Surrogate keys are assigned here, in the ETL, rather than by a database
-    sequence or IDENTITY column. docs/contracts/analytics-schema.sql forbids
-    both so that the same DDL runs unchanged on Snowflake, DuckDB and SQLite.
+    Surrogate keys are assigned here because the schema deliberately avoids
+    database-specific identity syntax.
     """
     (current_max,) = conn.execute(f"SELECT MAX({key_column}) FROM {table}").fetchone()
     return (current_max or 0) + 1

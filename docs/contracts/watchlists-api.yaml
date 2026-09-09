@@ -1,0 +1,215 @@
+openapi: 3.0.3
+info:
+  title: Watchlists and Price Alerts API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/market/quotes:
+    get:
+      operationId: listMarketQuotes
+      summary: List the latest Kafka-fed market quotes
+      responses:
+        '200':
+          description: Latest cached quote for each published symbol
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/MarketQuote' } }
+  /api/v1/market/quotes/{symbol}:
+    get:
+      operationId: getMarketQuote
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Latest cached quote for the symbol
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketQuote' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/watchlists:
+    get:
+      operationId: listWatchlists
+      responses:
+        '200':
+          description: Customer watchlists
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/WatchlistSummary' } }
+    post:
+      operationId: createWatchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 80 }
+      responses:
+        '200':
+          description: Created watchlist
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Watchlist' }
+  /api/v1/watchlists/{id}:
+    get:
+      operationId: getWatchlist
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Watchlist with latest prices
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Watchlist' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/watchlists/{id}/instruments:
+    post:
+      operationId: addWatchlistInstrument
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol]
+              properties:
+                symbol: { type: string, maxLength: 20 }
+      responses:
+        '200':
+          description: Updated watchlist
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Watchlist' }
+  /api/v1/watchlists/{id}/instruments/{symbol}:
+    delete:
+      operationId: removeWatchlistInstrument
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: symbol
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Instrument removed }
+  /api/v1/alerts:
+    get:
+      operationId: listPriceAlerts
+      responses:
+        '200':
+          description: Alert history
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PriceAlert' } }
+    post:
+      operationId: createPriceAlert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, direction, threshold]
+              properties:
+                symbol: { type: string, maxLength: 20 }
+                direction: { type: string, enum: [ABOVE, BELOW] }
+                threshold: { type: number, format: double, exclusiveMinimum: true, minimum: 0 }
+      responses:
+        '200':
+          description: Created alert
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PriceAlert' }
+  /api/v1/alerts/{id}:
+    delete:
+      operationId: disablePriceAlert
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Disabled alert
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PriceAlert' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    MarketQuote:
+      type: object
+      required: [symbol, price, currency, quoteAsOf, stale, marketState, feedMode, receivedOn]
+      properties:
+        symbol: { type: string }
+        price: { type: number }
+        currency: { type: string }
+        quoteAsOf: { type: string, format: date-time }
+        stale: { type: boolean }
+        marketState: { type: string }
+        feedMode: { type: string, enum: [live, fixture] }
+        receivedOn: { type: string, format: date-time }
+    WatchlistSummary:
+      type: object
+      required: [id, name, instrumentCount, createdOn]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        instrumentCount: { type: integer }
+        createdOn: { type: string, format: date-time }
+    WatchlistEntry:
+      type: object
+      required: [symbol, stale]
+      properties:
+        symbol: { type: string }
+        price: { type: number, nullable: true }
+        currency: { type: string, nullable: true }
+        quoteAsOf: { type: string, format: date-time, nullable: true }
+        stale: { type: boolean }
+    Watchlist:
+      type: object
+      required: [id, accountId, name, instruments, createdOn]
+      properties:
+        id: { type: string, format: uuid }
+        accountId: { type: integer, format: int64 }
+        name: { type: string }
+        instruments: { type: array, items: { $ref: '#/components/schemas/WatchlistEntry' } }
+        createdOn: { type: string, format: date-time }
+    PriceAlert:
+      type: object
+      required: [id, accountId, symbol, direction, threshold, status, createdOn]
+      properties:
+        id: { type: string, format: uuid }
+        accountId: { type: integer, format: int64 }
+        symbol: { type: string }
+        direction: { type: string, enum: [ABOVE, BELOW] }
+        threshold: { type: number }
+        status: { type: string, enum: [ACTIVE, TRIGGERED, DISABLED] }
+        createdOn: { type: string, format: date-time }
+        triggeredOn: { type: string, format: date-time, nullable: true }
+        triggeredPrice: { type: number, nullable: true }
+    Error:
+      type: object
+      required: [errorCode, message]
+      properties:
+        errorCode: { type: string }
+        message: { type: string }
+  responses:
+    Error:
+      description: Platform error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

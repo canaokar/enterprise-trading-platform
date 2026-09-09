@@ -1,0 +1,18 @@
+<main class="page">
+  <header class="page-header">
+    <div><h1>Notifications</h1><p class="muted small">Trade and price-alert delivery history.</p></div>
+    <button type="button" class="secondary" (click)="markAllRead()">Mark all read</button>
+  </header>
+
+  @if (error(); as message) { <div class="alert alert-error" role="alert">{{ message }}</div> }
+  <section class="card notification-list">
+    @for (item of items(); track item.id) {
+      <article class="notification" [class.unread]="!item.readOn">
+        <div><h2>{{ item.subject }}</h2><p>{{ item.message }}</p></div>
+        <div class="notification-meta small"><span class="badge badge-new">{{ item.channel }}</span><span>{{ item.deliveryState }}</span><span>{{ item.createdOn | date: 'medium' }}</span><span>{{ item.readOn ? 'Read' : 'Unread' }}</span></div>
+      </article>
+    } @empty {
+      <p class="empty">{{ loading() ? 'Loading' : 'No notifications yet' }}</p>
+    }
+  </section>
+</main>

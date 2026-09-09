@@ -3,6 +3,7 @@ package com.neueda.trading.executor.config;
 import com.neueda.trading.executor.execution.ExecutionLatency;
 import com.neueda.trading.executor.quote.CachingQuoteClient;
 import com.neueda.trading.executor.quote.FauxnanceQuoteClient;
+import com.neueda.trading.executor.quote.FixtureQuoteClient;
 import com.neueda.trading.executor.quote.QuoteClient;
 import java.time.Clock;
 import org.slf4j.Logger;
@@ -26,6 +27,10 @@ public class ExecutionConfig {
      */
     @Bean
     QuoteClient quoteClient(RestClient.Builder builder, FauxnanceProperties properties, Clock clock) {
+        if ("fixture".equalsIgnoreCase(properties.getMode())) {
+            log.info("Using deterministic fixture quotes");
+            return new FixtureQuoteClient(clock);
+        }
         if (properties.getApiKey().isBlank()) {
             log.warn("FAUXNANCE_API_KEY is not set. Every quote lookup will fail and every order "
                     + "will be rejected with PRICING_UNAVAILABLE.");

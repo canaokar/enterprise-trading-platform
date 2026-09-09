@@ -69,11 +69,7 @@ class FauxnanceSettings:
 
 @dataclass(frozen=True)
 class WarehouseSettings:
-    """Connection settings for the analytical store.
-
-    DuckDB is the Snowflake stand-in, per docs/DECISIONS.md, resolved
-    contradiction on Snowflake against a flat file. One file, no server.
-    """
+    """Connection settings for the embedded DuckDB analytical store."""
 
     path: str = field(default_factory=lambda: _env("DUCKDB_PATH", "warehouse.duckdb"))
 

@@ -2,13 +2,6 @@ import { Routes } from '@angular/router';
 
 import { authGuard } from './core/guards/auth-guard';
 
-/**
- * Four screens. Every one except sign-in is behind `authGuard`.
- *
- * Each screen is loaded with `loadComponent`, so the sign-in bundle does not carry the
- * dashboard, the order ticket and the blotter with it. That matters on a Sprint 11 deployment
- * where the first paint comes over a CDN to a browser that has cached nothing.
- */
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   {
@@ -33,6 +26,30 @@ export const routes: Routes = [
     title: 'Order history',
     canActivate: [authGuard],
     loadComponent: () => import('./features/blotter/blotter').then((m) => m.Blotter),
+  },
+  {
+    path: 'portfolio',
+    title: 'Portfolio and P&L',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/portfolio/portfolio').then((m) => m.Portfolio),
+  },
+  {
+    path: 'preferences',
+    title: 'Preferences',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/preferences/preferences').then((m) => m.Preferences),
+  },
+  {
+    path: 'notifications',
+    title: 'Notifications',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/notifications/notifications').then((m) => m.Notifications),
+  },
+  {
+    path: 'watchlists',
+    title: 'Watchlists and alerts',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/watchlists/watchlists').then((m) => m.Watchlists),
   },
   { path: '**', redirectTo: 'dashboard' },
 ];

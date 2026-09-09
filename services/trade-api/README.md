@@ -62,7 +62,7 @@ Keeping `sync` reachable after Sprint 7 is not sentiment. It lets a team run the
 1. The filter verifies the token and puts the identity on the request.
 2. `OrderService` checks that the token's `accountId` reaches the account in the body, or returns `ACC-403`.
 3. The account, the instrument and the position are loaded.
-4. `OrderPlacementService`, from the domain module, applies business rules 1 to 8 in order and returns an order in status `NEW`.
+4. `OrderPlacementService`, in the API's domain package, applies business rules 1 to 8 in order and returns an order in status `NEW`.
 5. The order is inserted. A duplicate `idempotency_key` violates the unique constraint and becomes `ORD-409`.
 6. In `sync` mode, `SettlementService` moves cash and position, the account row is updated with `WHERE version = :expected`, the position is upserted, and the order is filled with a guarded transition.
 7. The event is published after the transaction commits, never inside it.
@@ -122,10 +122,6 @@ The position upsert has a Postgres statement using `ON CONFLICT` and an H2 state
 The service needs Postgres and, in `async` mode, Kafka. The compose file that starts them is built alongside this service; the defaults here match it.
 
 ```bash
-# 1. Publish the domain module. There is no aggregator POM.
-mvn -f ../trading-engine/pom.xml install
-
-# 2. Run the service.
 mvn spring-boot:run
 ```
 
@@ -141,18 +137,17 @@ Without a broker, which is the Sprint 6 state:
 TRADING_EXECUTION_MODE=sync TRADING_KAFKA_ENABLED=false mvn spring-boot:run
 ```
 
-Build the image from the `services` directory, not from here, because the build needs both projects:
+Build the service image directly from this directory:
 
 ```bash
-docker build -f services/trade-api/Dockerfile -t trade-api:1.0.0 services
+docker build -t trade-api:1.0.0 services/trade-api
 ```
 
-In `docker-compose.yml` that is `context: ./services` and `dockerfile: ./trade-api/Dockerfile`. The container listens on 8080 and answers `GET /actuator/health` for the health check.
+The container listens on 8080 and answers `GET /actuator/health` for the health check.
 
 ## Testing
 
 ```bash
-mvn -f ../trading-engine/pom.xml install   # once, before the first run
 mvn test
 ```
 

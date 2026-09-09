@@ -151,7 +151,11 @@ def process_message(conn: duckdb.DuckDBPyConnection, raw_value: bytes | str) -> 
     return ProcessResult(status="loaded")
 
 
-def run_consumer(settings: Settings, max_messages: int | None = None) -> None:
+def run_consumer(
+    settings: Settings,
+    max_messages: int | None = None,
+    idle_timeout_ms: int | None = None,
+) -> None:
     """Owns the real `KafkaConsumer` and the DuckDB connection. Runs until
     `max_messages` have been handled, or forever if `max_messages` is None.
     """
@@ -159,13 +163,19 @@ def run_consumer(settings: Settings, max_messages: int | None = None) -> None:
 
     kafka_settings: KafkaSettings = settings.kafka
     conn = connect(settings.warehouse.path)
+    consumer_options = {
+        "bootstrap_servers": kafka_settings.bootstrap_servers,
+        "group_id": kafka_settings.consumer_group,
+        "enable_auto_commit": False,
+        "auto_offset_reset": "earliest",
+        "value_deserializer": lambda v: v,
+    }
+    if idle_timeout_ms is not None:
+        consumer_options["consumer_timeout_ms"] = idle_timeout_ms
+
     consumer = KafkaConsumer(
         kafka_settings.trade_events_topic,
-        bootstrap_servers=kafka_settings.bootstrap_servers,
-        group_id=kafka_settings.consumer_group,
-        enable_auto_commit=False,
-        auto_offset_reset="earliest",
-        value_deserializer=lambda v: v,
+        **consumer_options,
     )
 
     processed = 0

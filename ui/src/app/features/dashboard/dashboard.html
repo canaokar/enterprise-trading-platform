@@ -1,23 +1,16 @@
 <main class="page">
   <header class="page-header">
     <div>
-      <h1 data-testid="welcome-banner">Welcome, {{ account()?.holderName ?? 'trader' }}</h1>
+      <h1 data-testid="welcome-banner">Portfolio overview</h1>
       <p class="muted small">
         @if (account(); as detail) {
-          Account {{ detail.accountId }}, status {{ detail.status }}
+          {{ detail.holderName }} · {{ detail.accountId }}
         } @else {
           Loading your account
         }
       </p>
     </div>
-
-    <div class="button-row">
-      <a class="button" routerLink="/orders/new" data-testid="go-order-ticket">Place an order</a>
-      <a class="button secondary" routerLink="/orders" data-testid="go-blotter">Order history</a>
-      <button type="button" class="secondary" (click)="logout()" data-testid="logout">
-        Log out
-      </button>
-    </div>
+    <a class="button" routerLink="/orders/new" data-testid="go-order-ticket">Trade now</a>
   </header>
 
   @if (error(); as message) {
@@ -29,39 +22,71 @@
     </div>
   }
 
-  <section class="card balance-card" data-testid="balance-card">
-    <h2>Cash balance</h2>
-    @if (balance(); as cash) {
-      <p class="balance-amount numeric" data-testid="balance-amount">
-        {{ cash.cashBalance | currency: cash.currency : 'symbol' : '1.2-2' }}
-      </p>
-      <p class="muted small">
-        Available cash as at {{ cash.asOf | date: 'medium' }}. Holdings are not valued here: market
-        valuation is the Portfolio and P&amp;L extension.
-      </p>
-    } @else if (loading()) {
-      <p class="muted">Loading</p>
-    }
-  </section>
+  @if (portfolio(); as total) {
+    <section class="metric-grid">
+      <article class="card metric-card primary-metric">
+        <span>Portfolio value</span>
+        <strong class="numeric">{{ total.totalValue | currency: total.baseCurrency }}</strong>
+        <small>Cash and open positions</small>
+      </article>
+      <article class="card metric-card" data-testid="balance-card">
+        <span>Buying power</span>
+        <strong class="numeric" data-testid="balance-amount">{{ total.cashBalance | currency: total.baseCurrency }}</strong>
+        <small>Available to trade</small>
+      </article>
+      <article class="card metric-card">
+        <span>Market value</span>
+        <strong class="numeric">{{ total.marketValue | currency: total.baseCurrency }}</strong>
+        <small>{{ total.positionCount }} open positions</small>
+      </article>
+      <article class="card metric-card">
+        <span>Unrealised P&amp;L</span>
+        <strong class="numeric" [class.positive]="total.unrealisedPnl >= 0" [class.negative]="total.unrealisedPnl < 0">
+          {{ total.unrealisedPnl | currency: total.baseCurrency }}
+        </strong>
+        <small>{{ total.unrealisedPnlPercent | number: '1.2-2' }}%</small>
+      </article>
+    </section>
+  }
 
-  <section class="card" data-testid="positions-card">
-    <h2>Positions</h2>
-    @if (positions().length) {
-      <ul class="position-list">
-        @for (position of positions(); track position.symbol) {
-          <li class="position">
-            <span class="position-symbol">{{ position.symbol }}</span>
-            <span class="numeric">{{ position.quantity | number }} units</span>
-            <span class="numeric muted">
-              average cost {{ position.averageCost | number: '1.2-2' }}
-            </span>
-          </li>
-        }
-      </ul>
-    } @else if (!loading()) {
-      <p class="muted">No open positions. A filled buy order will appear here.</p>
-    } @else {
-      <p class="muted">Loading</p>
-    }
-  </section>
+  <div class="dashboard-grid">
+    <section class="card" data-testid="positions-card">
+      <div class="panel-heading"><h2>Positions</h2><a routerLink="/portfolio">View P&amp;L</a></div>
+      @if (positions().length) {
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Instrument</th><th class="right">Qty</th><th class="right">Avg.</th><th class="right">LTP</th><th class="right">Value</th><th class="right">P&amp;L</th></tr></thead>
+            <tbody>
+              @for (position of positions(); track position.symbol) {
+                <tr>
+                  <td><strong>{{ position.symbol }}</strong><small>{{ position.currency }}</small></td>
+                  <td class="right numeric">{{ position.quantity | number }}</td>
+                  <td class="right numeric">{{ position.averageCost | number: '1.2-2' }}</td>
+                  <td class="right numeric">{{ position.lastPrice == null ? '—' : (position.lastPrice | number: '1.2-2') }}</td>
+                  <td class="right numeric">{{ position.marketValue == null ? '—' : (position.marketValue | number: '1.2-2') }}</td>
+                  <td class="right numeric" [class.positive]="(position.unrealisedPnl ?? 0) >= 0" [class.negative]="(position.unrealisedPnl ?? 0) < 0">
+                    {{ position.unrealisedPnl == null ? '—' : (position.unrealisedPnl | number: '1.2-2') }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else if (!loading()) {
+        <p class="empty">No open positions</p>
+      }
+    </section>
+
+    <section class="card market-watch">
+      <div class="panel-heading"><h2>Market watch</h2><a routerLink="/watchlists">Manage</a></div>
+      @for (quote of quotes(); track quote.symbol) {
+        <a class="market-row" routerLink="/orders/new">
+          <span><strong>{{ quote.symbol }}</strong><small>{{ quote.marketState }}</small></span>
+          <span class="numeric"><strong>{{ quote.price | number: '1.2-2' }}</strong><small [class.positive]="!quote.stale">{{ quote.stale ? 'STALE' : 'CURRENT' }}</small></span>
+        </a>
+      } @empty {
+        <p class="empty">Market data loading</p>
+      }
+    </section>
+  </div>
 </main>

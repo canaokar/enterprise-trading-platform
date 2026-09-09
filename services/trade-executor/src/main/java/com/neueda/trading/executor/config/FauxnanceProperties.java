@@ -10,6 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "fauxnance")
 public class FauxnanceProperties {
 
+    private String mode = "live";
     private String baseUrl = "https://y4t9nq2bqf.execute-api.eu-west-2.amazonaws.com/v1";
     private String apiKey = "";
 
@@ -30,6 +31,14 @@ public class FauxnanceProperties {
     private int maxAttempts = 3;
 
     private Duration retryBackoff = Duration.ofMillis(200);
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
+    }
 
     public String getBaseUrl() {
         return baseUrl;

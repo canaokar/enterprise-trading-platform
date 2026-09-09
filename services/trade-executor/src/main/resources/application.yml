@@ -64,6 +64,7 @@ executor:
   topics:
     orders: ${ORDERS_TOPIC:orders}
     trade-events: ${TRADE_EVENTS_TOPIC:trade-events}
+    market-data: ${MARKET_DATA_TOPIC:market-data}
     dead-letter-suffix: .DLT
   max-delivery-attempts: ${MAX_DELIVERY_ATTEMPTS:4}
   latency:
@@ -74,6 +75,7 @@ executor:
     backoff: 25ms
 
 fauxnance:
+  mode: ${FAUXNANCE_MODE:live}
   base-url: ${FAUXNANCE_BASE_URL:https://y4t9nq2bqf.execute-api.eu-west-2.amazonaws.com/v1}
   api-key: ${FAUXNANCE_API_KEY:}
   quote-max-age: ${QUOTE_MAX_AGE:5s}

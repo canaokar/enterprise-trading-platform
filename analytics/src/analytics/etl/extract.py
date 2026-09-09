@@ -50,14 +50,18 @@ def extract_orders_since(engine: Engine, since: datetime | None) -> pd.DataFrame
     load step upserts on `source_order_id` rather than assuming a first
     write is the only write.
     """
-    query = text(
+    select = (
         "SELECT id, account_id, symbol, side, quantity, price, status, "
-        "executed_price, executed_on, reject_reason, created_on "
-        "FROM orders WHERE (:since IS NULL OR created_on > :since) "
-        "ORDER BY created_on"
+        "executed_price, executed_on, reject_reason, created_on FROM orders "
     )
+    if since is None:
+        query = text(select + "ORDER BY created_on")
+        params = None
+    else:
+        query = text(select + "WHERE created_on > :since ORDER BY created_on")
+        params = {"since": since}
     with engine.connect() as conn:
-        return pd.read_sql(query, conn, params={"since": since})
+        return pd.read_sql(query, conn, params=params)
 
 
 def extract_orders_range(engine: Engine, from_date: date, to_date: date) -> pd.DataFrame:

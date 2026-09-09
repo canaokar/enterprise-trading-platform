@@ -25,23 +25,12 @@
 
   <properties>
     <java.version>21</java.version>
-    <trading-engine.version>1.0.0</trading-engine.version>
     <mybatis.version>3.0.5</mybatis.version>
     <springdoc.version>2.8.17</springdoc.version>
     <jjwt.version>0.12.7</jjwt.version>
   </properties>
 
   <dependencies>
-
-    <!--
-      The Sprint 5 domain engine. Resolved from the local Maven repository: there is no aggregator
-      POM, so run `mvn install` in services/trading-engine before building this module.
-    -->
-    <dependency>
-      <groupId>com.tradingplatform</groupId>
-      <artifactId>trading-engine</artifactId>
-      <version>${trading-engine.version}</version>
-    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>

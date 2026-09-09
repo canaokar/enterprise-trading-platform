@@ -1,9 +1,8 @@
-import { DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { switchMap } from 'rxjs';
+import { switchMap, timer } from 'rxjs';
 
 import { toApiError } from '../../core/api-error';
 import {
@@ -15,7 +14,9 @@ import {
 } from '../../core/models/trade-api';
 import { AccountService } from '../../core/services/account-service';
 import { AuthService } from '../../core/services/auth-service';
+import { ExtensionService } from '../../core/services/extension-service';
 import { OrderService } from '../../core/services/order-service';
+import { MarketQuote } from '../../core/models/extension-api';
 import { greaterThanZero, maxDecimalPlaces, wholeNumber } from '../../core/validators';
 
 /**
@@ -44,7 +45,7 @@ type Phase = 'idle' | 'submitting' | 'pending' | 'settled' | 'timedOut';
  */
 @Component({
   selector: 'app-order-ticket',
-  imports: [ReactiveFormsModule, RouterLink, DecimalPipe],
+  imports: [ReactiveFormsModule, CurrencyPipe, DatePipe, DecimalPipe],
   templateUrl: './order-ticket.html',
   styleUrl: './order-ticket.css',
 })
@@ -53,12 +54,13 @@ export class OrderTicket {
   private readonly orders = inject(OrderService);
   private readonly accounts = inject(AccountService);
   private readonly auth = inject(AuthService);
+  private readonly extensions = inject(ExtensionService);
   private readonly destroyRef = inject(DestroyRef);
 
   /** Field rules mirror `PlaceOrderRequest` in `trade-api.yaml`, business rules 4 and 5. */
   readonly form = this.formBuilder.group({
     symbol: [
-      '',
+      'AAPL',
       [Validators.required, Validators.maxLength(20), Validators.pattern(/^[A-Za-z0-9.:_-]+$/)],
     ],
     side: ['BUY' as OrderSide, [Validators.required]],
@@ -74,6 +76,13 @@ export class OrderTicket {
   readonly accountId = signal<number | null>(null);
   readonly phase = signal<Phase>('idle');
   readonly error = signal<string | null>(null);
+  readonly marketError = signal<string | null>(null);
+  readonly quotes = signal<MarketQuote[]>([]);
+  readonly selectedSymbol = signal('AAPL');
+  readonly selectedQuote = computed(
+    () => this.quotes().find((quote) => quote.symbol === this.selectedSymbol()) ?? null,
+  );
+  readonly feedMode = computed(() => this.selectedQuote()?.feedMode ?? this.quotes()[0]?.feedMode);
 
   /** The API's answer to the POST. Its status may still be `NEW`. */
   readonly placed = signal<OrderResponse | null>(null);
@@ -106,6 +115,39 @@ export class OrderTicket {
         next: (account) => this.account.set(account),
         error: (failure: unknown) => this.error.set(toApiError(failure).message),
       });
+
+    this.form.controls.symbol.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((symbol) => this.selectedSymbol.set(symbol.trim().toUpperCase()));
+
+    timer(0, 15_000)
+      .pipe(
+        switchMap(() => this.extensions.getMarketQuotes()),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (quotes) => {
+          this.quotes.set(quotes);
+          this.marketError.set(null);
+          const selected = quotes.find((quote) => quote.symbol === this.selectedSymbol());
+          if (selected && this.form.controls.price.pristine) {
+            this.form.controls.price.setValue(this.roundPrice(selected.price));
+          }
+        },
+        error: () => this.marketError.set('Market prices are temporarily unavailable.'),
+      });
+  }
+
+  selectQuote(quote: MarketQuote): void {
+    this.form.controls.symbol.setValue(quote.symbol);
+    this.form.controls.price.setValue(this.roundPrice(quote.price));
+  }
+
+  useMarketPrice(): void {
+    const quote = this.selectedQuote();
+    if (quote) {
+      this.form.controls.price.setValue(this.roundPrice(quote.price));
+    }
   }
 
   submit(): void {
@@ -205,5 +247,9 @@ export class OrderTicket {
       .getAccount(accountId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (account) => this.account.set(account) });
+  }
+
+  private roundPrice(price: number): number {
+    return Math.round(price * 100) / 100;
   }
 }

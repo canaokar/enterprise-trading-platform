@@ -1,12 +1,14 @@
 import { Component, inject, signal } from '@angular/core';
-import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { forkJoin, switchMap } from 'rxjs';
 
 import { toApiError } from '../../core/api-error';
-import { AccountResponse, BalanceResponse, PositionResponse } from '../../core/models/trade-api';
+import { MarketQuote, PortfolioSummary, PricedPosition } from '../../core/models/extension-api';
+import { AccountResponse } from '../../core/models/trade-api';
 import { AccountService } from '../../core/services/account-service';
 import { AuthService } from '../../core/services/auth-service';
+import { ExtensionService } from '../../core/services/extension-service';
 
 /**
  * The landing screen: who you are, what cash you hold, what you are holding, and where to go
@@ -18,17 +20,19 @@ import { AuthService } from '../../core/services/auth-service';
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, CurrencyPipe, DecimalPipe, DatePipe],
+  imports: [RouterLink, CurrencyPipe, DecimalPipe],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
 })
 export class Dashboard {
   private readonly accounts = inject(AccountService);
   private readonly auth = inject(AuthService);
+  private readonly extensions = inject(ExtensionService);
 
   readonly account = signal<AccountResponse | null>(null);
-  readonly balance = signal<BalanceResponse | null>(null);
-  readonly positions = signal<PositionResponse[]>([]);
+  readonly portfolio = signal<PortfolioSummary | null>(null);
+  readonly positions = signal<PricedPosition[]>([]);
+  readonly quotes = signal<MarketQuote[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
 
@@ -46,16 +50,18 @@ export class Dashboard {
         switchMap((accountId) =>
           forkJoin({
             account: this.accounts.getAccount(accountId),
-            balance: this.accounts.getBalance(accountId),
-            positions: this.accounts.getPositions(accountId),
+            portfolio: this.extensions.getPortfolio(accountId),
+            positions: this.extensions.getPricedPositions(accountId),
+            quotes: this.extensions.getMarketQuotes(),
           }),
         ),
       )
       .subscribe({
         next: (result) => {
           this.account.set(result.account);
-          this.balance.set(result.balance);
+          this.portfolio.set(result.portfolio);
           this.positions.set(result.positions);
+          this.quotes.set(result.quotes);
           this.loading.set(false);
         },
         error: (failure: unknown) => {
@@ -65,7 +71,4 @@ export class Dashboard {
       });
   }
 
-  logout(): void {
-    this.auth.logout();
-  }
 }
