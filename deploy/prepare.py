@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
-"""Kubernetes and PostgreSQL helpers used by the trusted CloudFormation worker."""
+"""Engineering preparation and student database migrations, run by Jenkins."""
 
 from __future__ import annotations
 
 import hashlib
+import argparse
+import base64
+import json
+import os
+from pathlib import Path
+import re
 import subprocess
+import tempfile
 from urllib.parse import quote
 
+import boto3
 import psycopg
 from psycopg import sql
 import yaml
@@ -150,6 +158,62 @@ def application_secret(database, jwt, namespace):
               "PGHOST": host, "PGPORT": "5432", "PGDATABASE": name, "PGUSER": user, "PGPASSWORD": password,
               "PG_HOST": host, "PG_PORT": "5432", "PG_DATABASE": name, "PG_USER": user, "PG_PASSWORD": password,
               "JWT_SECRET": jwt["JWT_SECRET"]}
-    import base64
     return resource("Secret", "application-config", namespace, type="Opaque",
                     data={k: base64.b64encode(v.encode()).decode() for k, v in values.items()})
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=["prepare", "migrate"])
+    parser.add_argument("--region", required=True)
+    parser.add_argument("--student", required=True)
+    parser.add_argument("--shared-stack")
+    parser.add_argument("--outputs", type=Path, default=Path("environment.json"))
+    parser.add_argument("--ca", type=Path, default=Path("/opt/fidelity/rds-ca.pem"))
+    parser.add_argument("--migrations", type=Path, default=Path("infra/postgres"))
+    args = parser.parse_args()
+    if not re.fullmatch(r"s[0-9]{3}", args.student):
+        parser.error("Use the assigned student ID, such as s001")
+    session = boto3.Session(region_name=args.region)
+    cf, secrets = session.client("cloudformation"), session.client("secretsmanager")
+
+    def outputs(name):
+        stack = cf.describe_stacks(StackName=name)["Stacks"][0]
+        if stack["StackStatus"] not in ("CREATE_COMPLETE", "UPDATE_COMPLETE"):
+            raise ValueError("CloudFormation stack is not ready: " + name)
+        return {o["OutputKey"]: o["OutputValue"] for o in stack["Outputs"]}
+
+    def secret(arn):
+        return json.loads(secrets.get_secret_value(SecretId=arn)["SecretString"])
+
+    student = outputs(args.student)
+    if student["EnvironmentId"] != args.student or student["Namespace"] != "etp-" + args.student:
+        raise ValueError("Stack does not match the assigned student")
+    database = secret(student["DatabaseSecretArn"])
+    if args.action == "migrate":
+        migrations = sorted(args.migrations.glob("*.sql"))
+        if not migrations:
+            raise ValueError("No SQL migrations found in " + str(args.migrations))
+        migrate_database(database, args.ca, migrations)
+        return
+    if not args.shared_stack:
+        parser.error("prepare requires --shared-stack")
+    shared = outputs(args.shared_stack)
+    if any(student[k] != shared[k] for k in ("PlatformName", "ClusterName", "DatabaseHost")):
+        raise ValueError("Student stack belongs to a different shared platform")
+    initialise_database(secret(shared["DatabaseAdminSecretArn"]), database, args.ca, [])
+    with tempfile.TemporaryDirectory() as directory:
+        os.environ["KUBECONFIG"] = str(Path(directory) / "config")
+        subprocess.run(["aws", "eks", "update-kubeconfig", "--name", shared["ClusterName"], "--region", args.region], check=True)
+        apply(namespace_documents(shared, student))
+        auth = base64.b64encode((os.environ["JFROG_USER"] + ":" + os.environ["JFROG_TOKEN"]).encode()).decode()
+        docker = {"auths": {os.environ["JFROG_HOST"]: {"auth": auth}}}
+        apply([application_secret(database, secret(student["JwtSecretArn"]), student["Namespace"]),
+               resource("ConfigMap", "rds-ca", student["Namespace"], data={"ca.pem": args.ca.read_text()}),
+               resource("Secret", "jfrog-pull", student["Namespace"], type="kubernetes.io/dockerconfigjson",
+                        data={".dockerconfigjson": base64.b64encode(json.dumps(docker).encode()).decode()})])
+    args.outputs.write_text(json.dumps(student, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    main()

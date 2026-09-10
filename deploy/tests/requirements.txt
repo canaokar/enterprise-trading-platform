@@ -1,3 +1,0 @@
--r ../runtime/requirements.txt
-cfn-lint==1.56.0
-kubernetes-validate==1.36.0

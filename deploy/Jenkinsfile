@@ -1,0 +1,104 @@
+pipeline {
+  agent none
+  options {
+    skipDefaultCheckout()
+    disableConcurrentBuilds()
+    timeout(time: 60, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+  }
+  triggers { pollSCM('H/2 * * * *') }
+  environment {
+    AWS_REGION = 'ap-south-1'
+    SHARED_STACK = 'fidelity-india-shared'
+    STUDENT_ID = 's001'
+    REPOSITORY = 'https://github.com/REPLACE/team-repository.git'
+    BRANCH = 'main'
+    JFROG_HOST = 'REPLACE.jfrog.io'
+    IMAGE_PREFIX = 'REPLACE.jfrog.io/docker-local/fidelity-india/s001'
+  }
+  stages {
+    stage('Prepare environment') {
+      agent { label 'platform' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'jfrog-s001', usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_TOKEN')]) {
+          sh '''
+            /opt/fidelity/.venv/bin/python /opt/fidelity/deploy/prepare.py prepare \
+              --region "$AWS_REGION" --shared-stack "$SHARED_STACK" --student "$STUDENT_ID"
+          '''
+        }
+        stash name: 'environment', includes: 'environment.json'
+      }
+    }
+    stage('Build and deploy') {
+      agent { label 's001' }
+      steps {
+        git url: env.REPOSITORY, branch: env.BRANCH, credentialsId: 'github-read'
+        unstash 'environment'
+        withCredentials([usernamePassword(credentialsId: 'jfrog-s001', usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_TOKEN')]) {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+role=$(jq -r .ReleaseRoleArn environment.json)
+credentials=$(aws sts assume-role --role-arn "$role" --role-session-name "$STUDENT_ID" \
+  --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)
+read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN <<< "$credentials"
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+export KUBECONFIG="$WORKSPACE/kubeconfig"
+export DOCKER_CONFIG=$(mktemp -d)
+trap 'rm -rf "$DOCKER_CONFIG" "$KUBECONFIG"' EXIT
+
+mvn -B -f services/trade-api/pom.xml test
+mvn -B -f services/trade-executor/pom.xml test
+npm --prefix services/auth-service ci
+npm --prefix services/auth-service test -- --runInBand
+npm --prefix ui ci
+npm --prefix ui test
+python3 -m venv .venv
+.venv/bin/pip install -e './analytics[dev]'
+.venv/bin/python -m pytest analytics/tests
+
+printf '%s' "$JFROG_TOKEN" | docker login "$JFROG_HOST" --username "$JFROG_USER" --password-stdin
+export IMAGE_TAG=$(git rev-parse HEAD)
+for component in trade-api trade-executor auth-service; do
+  docker build --platform linux/amd64 -t "$IMAGE_PREFIX/$component:$IMAGE_TAG" "services/$component"
+  docker push "$IMAGE_PREFIX/$component:$IMAGE_TAG"
+done
+docker build --platform linux/amd64 -t "$IMAGE_PREFIX/analytics:$IMAGE_TAG" analytics
+docker push "$IMAGE_PREFIX/analytics:$IMAGE_TAG"
+
+/opt/fidelity/.venv/bin/python - <<'PY'
+import json, os
+from pathlib import Path
+import yaml
+settings = json.loads(Path('environment.json').read_text())
+config = {'production': True, 'tradeApiBaseUrl': settings['ApiUrl'], 'authApiBaseUrl': settings['AuthUrl'],
+          'orderPollIntervalMs': 2000, 'orderPollAttempts': 10}
+Path('ui/src/environments/environment.ts').write_text('export const environment = ' + json.dumps(config) + ';\\n')
+images = {key: f"{os.environ['IMAGE_PREFIX']}/{name}:{os.environ['IMAGE_TAG']}"
+          for key, name in [('tradeApi', 'trade-api'), ('tradeExecutor', 'trade-executor'), ('auth', 'auth-service'), ('analytics', 'analytics')]}
+Path('values.yaml').write_text(yaml.safe_dump({'images': images, 'frontendUrl': settings['FrontendUrl'],
+                                             'imagePullSecrets': [{'name': 'jfrog-pull'}]}))
+PY
+npm --prefix ui run build
+/opt/fidelity/.venv/bin/python /opt/fidelity/deploy/prepare.py migrate --region "$AWS_REGION" --student "$STUDENT_ID"
+aws eks update-kubeconfig --name "$(jq -r .ClusterName environment.json)" --region "$AWS_REGION"
+helm upgrade --install trading /opt/fidelity/deploy/chart --namespace "etp-$STUDENT_ID" \
+  --values values.yaml --atomic --wait --wait-for-jobs --timeout 15m --history-max 3
+bucket=$(jq -r .BucketName environment.json)
+aws s3 sync ui/dist/ui/browser "s3://$bucket" --exclude index.html \
+  --cache-control public,max-age=31536000,immutable --only-show-errors
+aws s3 cp ui/dist/ui/browser/index.html "s3://$bucket/index.html" \
+  --cache-control no-cache,no-store,must-revalidate --content-type text/html --only-show-errors
+distribution=$(jq -r .DistributionId environment.json)
+invalidation=$(aws cloudfront create-invalidation --distribution-id "$distribution" --paths '/*' --query Invalidation.Id --output text)
+aws cloudfront wait invalidation-completed --distribution-id "$distribution" --id "$invalidation"
+for url in "$(jq -r .FrontendUrl environment.json)" "$(jq -r .ApiUrl environment.json)/actuator/health" \
+           "$(jq -r .AuthUrl environment.json)/docs/json" "$(jq -r .AnalyticsUrl environment.json)/index.html"; do
+  curl --fail --retry 12 --retry-all-errors --retry-delay 5 --max-time 15 "$url" >/dev/null
+done
+'''
+        }
+        archiveArtifacts artifacts: 'environment.json,values.yaml', fingerprint: true
+      }
+    }
+  }
+}

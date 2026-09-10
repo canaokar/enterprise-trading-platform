@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Engineering entry point. Shared Fidelity platform and automatic learner provisioning.
+Description: Shared training infrastructure. Engineering configures EKS and Jenkins after this stack completes.
 Parameters:
   PlatformName: {Type: String, Default: fidelity-lab, AllowedPattern: '[a-z][a-z0-9-]{2,19}'}
   KubernetesVersion:
@@ -40,40 +40,22 @@ Parameters:
   ProtectDatabase:
     Type: String
     Default: 'true'
-    AllowedValues: ['true', 'false']
+    AllowedValues:
+    - 'true'
+    - 'false'
     Description: Set false through a reviewed stack update only when preparing final teardown.
   LogRetentionDays: {Type: Number, Default: 7, AllowedValues: [3, 5, 7, 14, 30]}
-  AssetBucket: {Type: String, Description: Existing private release bucket in this account and region. Created by engineering packaging.}
-  AssetPrefix: {Type: String, Description: Immutable kit prefix printed by package.py. Do not overwrite a published kit.}
-  JenkinsSecretArn: {Type: String, Description: 'Existing Secrets Manager JSON: url, username, apiToken. Jenkins must be reachable over
-      HTTPS.'}
-  JenkinsRoleName: {Type: String, Description: Existing same-account IAM role used by the Jenkins CodeBuild plugin.}
-  JenkinsGitCredentialId: {Type: String, Description: Existing Jenkins credential with read-only access to the allowed GitHub organisation.}
-  JenkinsCheckoutLabel: {Type: String, Description: Existing lightweight Jenkins agent label for Git checkout only. No student code
-      runs there.}
-  JFrogSecretArn:
-    Type: String
-    Description: 'Existing Secrets Manager JSON: url, token, registryHost, dockerRepository. Token administers lab users and permissions.'
-  GitHubOrganisation:
-    Type: String
-    Description: Only repositories in this GitHub organisation may be deployed.
-    AllowedPattern: '[A-Za-z0-9][A-Za-z0-9-]{0,38}'
-  GitHubConnectionArn: {Type: String, Description: Existing AVAILABLE CodeConnections GitHub connection authorised for the cohort repositories.}
-  StudentCount:
-    Type: Number
-    Default: 143
-    MinValue: 1
-    MaxValue: 143
-    Description: Students in this regional cohort. Stack names are s001 through this count.
   AlbCount:
     Type: Number
-    Default: 5
-    AllowedValues: [1, 2, 3, 4, 5]
-    Description: One ALB per 30 students. Use one for the pilot; five supports 143.
-  BuildImage:
-    Type: String
-    Description: AWS-managed Linux x86_64 CodeBuild image, tested by engineering.
-    Default: aws/codebuild/standard:7.0
+    Default: 1
+    AllowedValues:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    Description: One ALB per 30 students. Five supports 143 students.
+  JenkinsUrl: {Type: String, Description: 'Existing Jenkins URL, without a trailing slash.', AllowedPattern: 'https://[^ ]+[^/]'}
 Conditions:
   DatabaseProtected: {'Fn::Equals': [{Ref: ProtectDatabase}, 'true']}
   AlbBEnabled:
@@ -227,7 +209,11 @@ Resources:
         - {DeviceName: /dev/xvda, Ebs: {Encrypted: true, VolumeSize: 40, VolumeType: gp3, DeleteOnTermination: true}}
   Workers:
     Type: AWS::EKS::Nodegroup
-    DependsOn: [PrivateDefaultRoute, PrivateAssociationA, PrivateAssociationB, VpcCni]
+    DependsOn:
+    - PrivateDefaultRoute
+    - PrivateAssociationA
+    - PrivateAssociationB
+    - VpcCni
     Properties:
       ClusterName: {Ref: Cluster}
       NodeRole: {'Fn::GetAtt': [NodeRole, Arn]}
@@ -282,7 +268,9 @@ Resources:
       - {'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy'}
   EbsAddon:
     Type: AWS::EKS::Addon
-    DependsOn: [Workers, PodIdentityAgent]
+    DependsOn:
+    - Workers
+    - PodIdentityAgent
     Properties:
       ClusterName: {Ref: Cluster}
       AddonName: aws-ebs-csi-driver
@@ -303,7 +291,9 @@ Resources:
           Statement:
           - {Effect: Allow, Action: ['ec2:Describe*', 'elasticloadbalancing:Describe*'], Resource: '*'}
           - Effect: Allow
-            Action: ['elasticloadbalancing:RegisterTargets', 'elasticloadbalancing:DeregisterTargets']
+            Action:
+            - elasticloadbalancing:RegisterTargets
+            - elasticloadbalancing:DeregisterTargets
             Resource: {'Fn::Sub': 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:targetgroup/*/*'}
             Condition: {StringEquals: {'aws:ResourceTag/Platform': {Ref: PlatformName}}}
   TargetBindingIdentity:
@@ -326,7 +316,10 @@ Resources:
           Version: '2012-10-17'
           Statement:
           - Effect: Allow
-            Action: ['logs:CreateLogStream', 'logs:PutLogEvents', 'logs:DescribeLogStreams']
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - logs:DescribeLogStreams
             Resource: {'Fn::Sub': 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/fidelity/${PlatformName}/*:*'}
   LogWriterIdentity:
     Type: AWS::EKS::PodIdentityAssociation
@@ -376,7 +369,8 @@ Resources:
       ManageMasterUserPassword: true
       BackupRetentionPeriod: 1
       DeletionProtection: {'Fn::If': [DatabaseProtected, true, false]}
-      EnableCloudwatchLogsExports: [postgresql]
+      EnableCloudwatchLogsExports:
+      - postgresql
       Tags:
       - {Key: Platform, Value: {Ref: PlatformName}}
   DatabaseLogs:
@@ -512,313 +506,24 @@ Resources:
       - Type: fixed-response
         FixedResponseConfig: {StatusCode: '404', ContentType: text/plain, MessageBody: Unknown lab environment}
     Condition: AlbEEnabled
-  AutomationSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties: {GroupDescription: Outbound-only platform bootstrap and isolated release builds, VpcId: {Ref: Vpc}}
-  DbAutomationIngress:
+  JenkinsSecurityGroup: {Type: 'AWS::EC2::SecurityGroup', Properties: {GroupDescription: Jenkins agents in the training VPC, VpcId: {
+        Ref: Vpc}}}
+  JenkinsDatabaseAccess:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: {Ref: DbSecurityGroup}
       IpProtocol: tcp
       FromPort: 5432
       ToPort: 5432
-      SourceSecurityGroupId: {Ref: AutomationSecurityGroup}
-  ApiAutomationIngress:
+      SourceSecurityGroupId: {Ref: JenkinsSecurityGroup}
+  JenkinsClusterAccess:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: {'Fn::GetAtt': [Cluster, ClusterSecurityGroupId]}
       IpProtocol: tcp
       FromPort: 443
       ToPort: 443
-      SourceSecurityGroupId: {Ref: AutomationSecurityGroup}
-  JenkinsBuildPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: {'Fn::Sub': '${PlatformName}-jenkins-builds'}
-      Roles:
-      - {Ref: JenkinsRoleName}
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action: ['codebuild:StartBuild', 'codebuild:BatchGetProjects']
-          Resource: {'Fn::Sub': 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${PlatformName}-s*'}
-        - Effect: Allow
-          Action: ['codebuild:BatchGetBuilds', 'codebuild:StopBuild']
-          Resource: {'Fn::Sub': 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:build/${PlatformName}-s*:*'}
-        - Effect: Allow
-          Action: ['logs:GetLogEvents', 'logs:DescribeLogStreams']
-          Resource: {'Fn::Sub': 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/fidelity/${PlatformName}/*:*'}
-  LearnerExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - {Effect: Allow, Principal: {Service: cloudformation.amazonaws.com}, Action: 'sts:AssumeRole'}
-      Policies:
-      - PolicyName: Lab
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - iam:CreateRole
-            - iam:DeleteRole
-            - iam:GetRole
-            - iam:PutRolePolicy
-            - iam:DeleteRolePolicy
-            - iam:GetRolePolicy
-            - iam:TagRole
-            - iam:UntagRole
-            - iam:PassRole
-            - iam:ListRolePolicies
-            - iam:ListAttachedRolePolicies
-            - iam:ListInstanceProfilesForRole
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${PlatformName}-s*-build'}
-          - Effect: Allow
-            Action:
-            - codebuild:CreateProject
-            - codebuild:UpdateProject
-            - codebuild:DeleteProject
-            - codebuild:BatchGetProjects
-            - codebuild:ListBuildsForProject
-            - codebuild:StartBuild
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${PlatformName}-s*'}
-          - Effect: Allow
-            Action: ['codebuild:BatchGetBuilds', 'codebuild:StopBuild']
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:build/${PlatformName}-s*:*'}
-          - Effect: Allow
-            Action:
-            - secretsmanager:CreateSecret
-            - secretsmanager:DescribeSecret
-            - secretsmanager:GetSecretValue
-            - secretsmanager:PutSecretValue
-            - secretsmanager:UpdateSecret
-            - secretsmanager:DeleteSecret
-            - secretsmanager:TagResource
-            - secretsmanager:UntagResource
-            - secretsmanager:GetResourcePolicy
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${PlatformName}/s*'}
-          - Effect: Allow
-            Action:
-            - s3:CreateBucket
-            - s3:DeleteBucket
-            - s3:Get*
-            - s3:List*
-            - s3:Put*
-            - s3:DeleteObject
-            - s3:DeleteObjectVersion
-            Resource:
-            - {'Fn::Sub': 'arn:${AWS::Partition}:s3:::${PlatformName}-${AWS::AccountId}-${AWS::Region}-s*'}
-            - {'Fn::Sub': 'arn:${AWS::Partition}:s3:::${PlatformName}-${AWS::AccountId}-${AWS::Region}-s*/*'}
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:DeleteLogGroup
-            - logs:PutRetentionPolicy
-            - logs:ListTagsForResource
-            - logs:TagResource
-            - logs:UntagResource
-            Resource:
-            - {'Fn::Sub': 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/fidelity/${PlatformName}/*'}
-            - {'Fn::Sub': 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/fidelity/${PlatformName}/*:*'}
-          - Effect: Allow
-            Action:
-            - cloudwatch:PutMetricAlarm
-            - cloudwatch:DeleteAlarms
-            - cloudwatch:DescribeAlarms
-            - cloudwatch:TagResource
-            - cloudwatch:UntagResource
-            - cloudwatch:ListTagsForResource
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${PlatformName}-s*'}
-          - {Effect: Allow, Action: ['elasticloadbalancing:Describe*', 'ec2:Describe*'], Resource: '*'}
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:CreateTargetGroup
-            - elasticloadbalancing:ModifyTargetGroup
-            - elasticloadbalancing:ModifyTargetGroupAttributes
-            - elasticloadbalancing:DeleteTargetGroup
-            - elasticloadbalancing:AddTags
-            - elasticloadbalancing:RemoveTags
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:targetgroup/*/*'}
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:CreateRule
-            - elasticloadbalancing:ModifyRule
-            - elasticloadbalancing:DeleteRule
-            - elasticloadbalancing:SetRulePriorities
-            - elasticloadbalancing:AddTags
-            - elasticloadbalancing:RemoveTags
-            Resource:
-            - {'Fn::Sub': 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:listener/app/*'}
-            - {'Fn::Sub': 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:listener-rule/app/*'}
-          - Effect: Allow
-            Action: ['route53:ChangeResourceRecordSets', 'route53:ListResourceRecordSets', 'route53:GetHostedZone']
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}'}
-          - {Effect: Allow, Action: 'route53:GetChange', Resource: {'Fn::Sub': 'arn:${AWS::Partition}:route53:::change/*'}}
-          - Effect: Allow
-            Action:
-            - cloudfront:CreateDistribution
-            - cloudfront:GetDistribution
-            - cloudfront:GetDistributionConfig
-            - cloudfront:UpdateDistribution
-            - cloudfront:DeleteDistribution
-            - cloudfront:TagResource
-            - cloudfront:UntagResource
-            - cloudfront:ListTagsForResource
-            - cloudfront:CreateOriginAccessControl
-            - cloudfront:GetOriginAccessControl
-            - cloudfront:UpdateOriginAccessControl
-            - cloudfront:DeleteOriginAccessControl
-            - cloudfront:CreateFunction
-            - cloudfront:DescribeFunction
-            - cloudfront:UpdateFunction
-            - cloudfront:PublishFunction
-            - cloudfront:DeleteFunction
-            - cloudfront:CreateCachePolicy
-            - cloudfront:GetCachePolicy
-            - cloudfront:UpdateCachePolicy
-            - cloudfront:DeleteCachePolicy
-            - cloudfront:GetFunction
-            Resource: '*'
-          - {Effect: Allow, Action: 'secretsmanager:GetRandomPassword', Resource: '*'}
-          - Effect: Allow
-            Action: ['codeconnections:PassConnection', 'codeconnections:GetConnection']
-            Resource: {Ref: GitHubConnectionArn}
-          - Effect: Allow
-            Action: s3:GetObject
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:s3:::${AssetBucket}/${AssetPrefix}/learner.yaml'}
-          - {Effect: Allow, Action: 'lambda:InvokeFunction', Resource: {'Fn::GetAtt': [SetupFunction, Arn]}}
-          - Effect: Allow
-            Action:
-            - eks:CreateAccessEntry
-            - eks:DescribeAccessEntry
-            - eks:UpdateAccessEntry
-            - eks:DeleteAccessEntry
-            - eks:TagResource
-            - eks:UntagResource
-            Resource:
-            - {'Fn::GetAtt': [Cluster, Arn]}
-            - {'Fn::Sub': 'arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:access-entry/${PlatformName}/*'}
-          - {Effect: Allow, Action: 'logs:DescribeLogGroups', Resource: '*'}
-  SetupRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - {Effect: Allow, Principal: {Service: lambda.amazonaws.com}, Action: 'sts:AssumeRole'}
-      Policies:
-      - PolicyName: Lab
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${PlatformName}-setup:*'}
-          - {Effect: Allow, Action: 'eks:DescribeCluster', Resource: {'Fn::GetAtt': [Cluster, Arn]}}
-          - Effect: Allow
-            Action: secretsmanager:GetSecretValue
-            Resource:
-            - {Ref: JenkinsSecretArn}
-            - {Ref: JFrogSecretArn}
-            - {'Fn::GetAtt': [Database, MasterUserSecret.SecretArn]}
-            - {'Fn::Sub': 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${PlatformName}/s*'}
-          - Effect: Allow
-            Action: ['s3:ListBucketVersions', 's3:ListBucket', 's3:DeleteObject', 's3:DeleteObjectVersion']
-            Resource:
-            - {'Fn::Sub': 'arn:${AWS::Partition}:s3:::${PlatformName}-${AWS::AccountId}-${AWS::Region}-s*'}
-            - {'Fn::Sub': 'arn:${AWS::Partition}:s3:::${PlatformName}-${AWS::AccountId}-${AWS::Region}-s*/*'}
-          - Effect: Allow
-            Action: ['codebuild:ListBuildsForProject']
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${PlatformName}-s*'}
-          - Effect: Allow
-            Action: ['codebuild:StopBuild', 'codebuild:BatchGetBuilds']
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:build/${PlatformName}-s*:*'}
-          - Effect: Allow
-            Action: secretsmanager:PutSecretValue
-            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${PlatformName}/s*/registry-*'}
-      ManagedPolicyArns:
-      - {'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'}
-  SetupAccess:
-    Type: AWS::EKS::AccessEntry
-    Properties:
-      ClusterName: {Ref: Cluster}
-      PrincipalArn: {'Fn::GetAtt': [SetupRole, Arn]}
-      Type: STANDARD
-      AccessPolicies:
-      - PolicyArn: {'Fn::Sub': 'arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy'}
-        AccessScope: {Type: cluster}
-  SetupLogs:
-    Type: AWS::Logs::LogGroup
-    Properties: {LogGroupName: {'Fn::Sub': '/aws/lambda/${PlatformName}-setup'}, RetentionInDays: {Ref: LogRetentionDays}}
-  SetupFunction:
-    Type: AWS::Lambda::Function
-    DependsOn: [SetupLogs, ApiAutomationIngress, DbAutomationIngress]
-    Properties:
-      FunctionName: {'Fn::Sub': '${PlatformName}-setup'}
-      Runtime: python3.12
-      Handler: setup.handler
-      Role: {'Fn::GetAtt': [SetupRole, Arn]}
-      MemorySize: 1024
-      Timeout: 900
-      ReservedConcurrentExecutions: 3
-      Code: {S3Bucket: {Ref: AssetBucket}, S3Key: {'Fn::Sub': '${AssetPrefix}/setup.zip'}}
-      VpcConfig: {SubnetIds: [{Ref: PrivateA}, {Ref: PrivateB}], SecurityGroupIds: [{Ref: AutomationSecurityGroup}]}
-      Environment:
-        Variables:
-          CONFIG_JSON:
-            Fn::Sub:
-            - '{"PlatformName": "${V0}", "ClusterName": "${V1}", "VpcId": "${V2}", "VpcCidr": "${V3}", "PublicSubnetCidrA": "${V4}",
-              "PublicSubnetCidrB": "${V5}", "DatabaseHost": "${V6}", "DatabaseAdminSecretArn": "${V7}", "HostedZoneId": "${V8}", "BaseDomain":
-              "${V9}", "AssetBucket": "${V10}", "AssetPrefix": "${V11}", "JenkinsSecretArn": "${V12}", "JenkinsGitCredentialId": "${V13}",
-              "JenkinsCheckoutLabel": "${V14}", "JFrogSecretArn": "${V15}", "GitHubOrganisation": "${V16}", "GitHubConnectionArn": "${V17}",
-              "StudentCount": "${V18}", "BuildImage": "${V19}", "LogRetentionDays": "${V20}", "Region": "${V21}", "AccountId": "${V22}",
-              "SharedStackId": "${V23}", "PrivateSubnetIds": "${V24}", "BuildSecurityGroupId": "${V25}"}'
-            - V0: {Ref: PlatformName}
-              V1: {Ref: Cluster}
-              V2: {Ref: Vpc}
-              V3: {Ref: VpcCidr}
-              V4: {'Fn::Select': [0, {'Fn::Cidr': [{Ref: VpcCidr}, 2, 8]}]}
-              V5: {'Fn::Select': [1, {'Fn::Cidr': [{Ref: VpcCidr}, 2, 8]}]}
-              V6: {'Fn::GetAtt': [Database, Endpoint.Address]}
-              V7: {'Fn::GetAtt': [Database, MasterUserSecret.SecretArn]}
-              V8: {Ref: HostedZoneId}
-              V9: {Ref: BaseDomain}
-              V10: {Ref: AssetBucket}
-              V11: {Ref: AssetPrefix}
-              V12: {Ref: JenkinsSecretArn}
-              V13: {Ref: JenkinsGitCredentialId}
-              V14: {Ref: JenkinsCheckoutLabel}
-              V15: {Ref: JFrogSecretArn}
-              V16: {Ref: GitHubOrganisation}
-              V17: {Ref: GitHubConnectionArn}
-              V18: {Ref: StudentCount}
-              V19: {Ref: BuildImage}
-              V20: {Ref: LogRetentionDays}
-              V21: {Ref: 'AWS::Region'}
-              V22: {Ref: 'AWS::AccountId'}
-              V23: {Ref: 'AWS::StackId'}
-              V24: {'Fn::Join': [',', [{Ref: PrivateA}, {Ref: PrivateB}]]}
-              V25: {Ref: AutomationSecurityGroup}
-          HOME: /tmp
-          HELM_CACHE_HOME: /tmp/helm/cache
-          HELM_CONFIG_HOME: /tmp/helm/config
-          HELM_DATA_HOME: /tmp/helm/data
-          KUBECONFIG: /tmp/kubeconfig
-  PlatformBootstrap:
-    Type: Custom::FidelityPlatform
-    DependsOn:
-    - Workers
-    - CoreDns
-    - KubeProxy
-    - EbsAddon
-    - SetupAccess
-    - TargetBindingIdentity
-    - LogWriterIdentity
-    - JenkinsBuildPolicy
-    Properties: {ServiceToken: {'Fn::GetAtt': [SetupFunction, Arn]}, ServiceTimeout: 1000, Revision: {Ref: AssetPrefix}}
+      SourceSecurityGroupId: {Ref: JenkinsSecurityGroup}
 Outputs:
   PlatformName: {Value: {Ref: PlatformName}, Export: {Name: {'Fn::Sub': '${PlatformName}-PlatformName'}}}
   ClusterName: {Value: {Ref: Cluster}, Export: {Name: {'Fn::Sub': '${PlatformName}-ClusterName'}}}
@@ -867,15 +572,6 @@ Outputs:
     Condition: AlbEEnabled
     Value: {'Fn::GetAtt': [AlbE, CanonicalHostedZoneID]}
     Export: {Name: {'Fn::Sub': '${PlatformName}-AlbZoneE'}}
-  LearnerTemplateUrl: {Value: {'Fn::Sub': 'https://${AssetBucket}.s3.${AWS::Region}.amazonaws.com/${AssetPrefix}/learner.yaml'}}
-  LearnerStackPrefix: {Value: s}
-  PlatformStatus: {Value: {'Fn::GetAtt': [PlatformBootstrap, Status]}}
-  SetupFunctionArn: {Value: {'Fn::GetAtt': [SetupFunction, Arn]}, Export: {Name: {'Fn::Sub': '${PlatformName}-SetupFunctionArn'}}}
-  LearnerExecutionRoleArn: {Value: {'Fn::GetAtt': [LearnerExecutionRole, Arn]}, Export: {Name: {'Fn::Sub': '${PlatformName}-LearnerExecutionRoleArn'}}}
-  AssetBucket: {Value: {Ref: AssetBucket}, Export: {Name: {'Fn::Sub': '${PlatformName}-AssetBucket'}}}
-  AssetPrefix: {Value: {Ref: AssetPrefix}, Export: {Name: {'Fn::Sub': '${PlatformName}-AssetPrefix'}}}
-  BuildImage: {Value: {Ref: BuildImage}, Export: {Name: {'Fn::Sub': '${PlatformName}-BuildImage'}}}
-  GitHubConnectionArn: {Value: {Ref: GitHubConnectionArn}, Export: {Name: {'Fn::Sub': '${PlatformName}-GitHubConnectionArn'}}}
-  StudentCount: {Value: {Ref: StudentCount}, Export: {Name: {'Fn::Sub': '${PlatformName}-StudentCount'}}}
-  BuildSecurityGroupId: {Value: {Ref: AutomationSecurityGroup}, Export: {Name: {'Fn::Sub': '${PlatformName}-BuildSecurityGroupId'}}}
   LogRetentionDays: {Value: {Ref: LogRetentionDays}, Export: {Name: {'Fn::Sub': '${PlatformName}-LogRetentionDays'}}}
+  JenkinsUrl: {Value: {Ref: JenkinsUrl}, Export: {Name: {'Fn::Sub': '${PlatformName}-JenkinsUrl'}}}
+  JenkinsSecurityGroupId: {Value: {Ref: JenkinsSecurityGroup}, Export: {Name: {'Fn::Sub': '${PlatformName}-JenkinsSecurityGroupId'}}}

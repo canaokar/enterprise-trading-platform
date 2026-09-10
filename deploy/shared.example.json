@@ -1,19 +1,12 @@
 [
   {"ParameterKey":"PlatformName","ParameterValue":"fidelity-india"},
-  {"ParameterKey":"KubernetesVersion","ParameterValue":"1.34"},
-  {"ParameterKey":"DbEngineVersion","ParameterValue":"REPLACE_WITH_AVAILABLE_POSTGRES_16_MINOR"},
-  {"ParameterKey":"PlatformAdminRoleArn","ParameterValue":"arn:aws:iam::123456789012:role/TrainingEngineer"},
+  {"ParameterKey":"KubernetesVersion","ParameterValue":"REPLACE_WITH_SUPPORTED_VERSION"},
+  {"ParameterKey":"DbEngineVersion","ParameterValue":"REPLACE_WITH_POSTGRES_16_MINOR"},
+  {"ParameterKey":"PlatformAdminRoleArn","ParameterValue":"arn:aws:iam::123456789012:role/TrainingPlatform"},
   {"ParameterKey":"ApiAccessCidr","ParameterValue":"203.0.113.10/32"},
   {"ParameterKey":"HostedZoneId","ParameterValue":"REPLACE_WITH_HOSTED_ZONE_ID"},
   {"ParameterKey":"BaseDomain","ParameterValue":"india.lab.example.com"},
-  {"ParameterKey":"StudentCount","ParameterValue":"2"},
+  {"ParameterKey":"JenkinsUrl","ParameterValue":"https://jenkins.example.com"},
   {"ParameterKey":"AlbCount","ParameterValue":"1"},
-  {"ParameterKey":"WorkerCount","ParameterValue":"2"},
-  {"ParameterKey":"JenkinsSecretArn","ParameterValue":"arn:aws:secretsmanager:ap-south-1:123456789012:secret:lab/jenkins-REPLACE"},
-  {"ParameterKey":"JFrogSecretArn","ParameterValue":"arn:aws:secretsmanager:ap-south-1:123456789012:secret:lab/jfrog-REPLACE"},
-  {"ParameterKey":"JenkinsRoleName","ParameterValue":"TrainingJenkins"},
-  {"ParameterKey":"JenkinsGitCredentialId","ParameterValue":"training-github-read"},
-  {"ParameterKey":"JenkinsCheckoutLabel","ParameterValue":"checkout"},
-  {"ParameterKey":"GitHubOrganisation","ParameterValue":"REPLACE_WITH_GITHUB_ORGANISATION"},
-  {"ParameterKey":"GitHubConnectionArn","ParameterValue":"arn:aws:codeconnections:ap-south-1:123456789012:connection/REPLACE"}
+  {"ParameterKey":"WorkerCount","ParameterValue":"2"}
 ]
