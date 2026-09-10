@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """Install the Kubernetes components that complement shared.yaml."""
 
-import argparse
-import json
 import subprocess
+from pathlib import Path
 
-import boto3
 
-from environment import apply, outputs
+from environment import apply
 
 
 def platform_documents(platform, region):
@@ -89,33 +87,15 @@ def platform_documents(platform, region):
     ]
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--region", required=True)
-    parser.add_argument("--shared-stack", required=True)
-    parser.add_argument("--controller-chart-version", default="3.5.0")
-    args = parser.parse_args()
-    session = boto3.Session(region_name=args.region)
-    shared = outputs(session.client("cloudformation"), args.shared_stack)
-    current = json.loads(subprocess.check_output(["kubectl", "config", "view", "--minify", "-o", "json"]))
-    endpoint = session.client("eks").describe_cluster(name=shared["ClusterName"])["cluster"]["endpoint"]
-    if current["clusters"][0]["cluster"]["server"] != endpoint:
-        raise ValueError("kubectl is pointed at another cluster; run aws eks update-kubeconfig first")
-    subprocess.run(["helm", "repo", "add", "eks", "https://aws.github.io/eks-charts", "--force-update"], check=True)
-    subprocess.run(["helm", "repo", "update", "eks"], check=True)
+def bootstrap(shared, region):
     subprocess.run([
-        "helm", "upgrade", "--install", "aws-load-balancer-controller", "eks/aws-load-balancer-controller",
-        "--namespace", "kube-system", "--version", args.controller_chart_version,
-        "--set", f"clusterName={shared['ClusterName']}", "--set", f"region={args.region}",
+        "helm", "upgrade", "--install", "aws-load-balancer-controller", str(Path(__file__).parent / "controller.tgz"),
+        "--namespace", "kube-system",
+        "--set", f"clusterName={shared['ClusterName']}", "--set", f"region={region}",
         "--set", f"vpcId={shared['VpcId']}", "--set", "serviceAccount.name=aws-load-balancer-controller",
         "--set", "enableServiceMutatorWebhook=false", "--set", "enableBackendSecurityGroup=false",
         "--set", "enableShield=false", "--set", "enableWaf=false", "--set", "enableWafv2=false",
-        "--wait", "--timeout", "10m",
-    ], check=True)
-    apply(platform_documents(shared["PlatformName"], args.region))
-    subprocess.run(["kubectl", "rollout", "status", "daemonset/fluent-bit", "-n", "amazon-cloudwatch", "--timeout=300s"], check=True)
-    print("Platform Kubernetes components installed. Verify CloudWatch delivery after the first group release.")
-
-
-if __name__ == "__main__":
-    main()
+        "--wait", "--timeout", "300s",
+    ], check=True, timeout=330)
+    apply(platform_documents(shared["PlatformName"], region))
+    subprocess.run(["kubectl", "rollout", "status", "daemonset/fluent-bit", "-n", "amazon-cloudwatch", "--timeout=120s"], check=True, timeout=150)

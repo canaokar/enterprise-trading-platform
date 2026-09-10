@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Release existing images and an Angular build using the group's scoped role."""
+"""Release existing images and an Angular build using the student's CodeBuild role."""
 
 import argparse
 import json
@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
+import urllib.error
 import urllib.request
 
 import boto3
@@ -41,17 +43,11 @@ def main():
         if re.search(r"https?://localhost(?::\d+)?", bundle.read_text()):
             parser.error(f"Production bundle still contains a localhost URL: {bundle.name}")
     session = boto3.Session(region_name=args.region)
-    credentials = session.client("sts").assume_role(
-        RoleArn=settings["ReleaseRoleArn"], RoleSessionName="etp-release", DurationSeconds=3600,
-    )["Credentials"]
-    child_env = {**os.environ, "AWS_REGION": args.region, "AWS_DEFAULT_REGION": args.region,
-                 "AWS_ACCESS_KEY_ID": credentials["AccessKeyId"],
-                 "AWS_SECRET_ACCESS_KEY": credentials["SecretAccessKey"],
-                 "AWS_SESSION_TOKEN": credentials["SessionToken"]}
+    child_env = {**os.environ, "AWS_REGION": args.region, "AWS_DEFAULT_REGION": args.region}
     # Environment credentials take precedence; remove profile selectors to avoid ambiguity.
     child_env.pop("AWS_PROFILE", None)
     child_env.pop("AWS_DEFAULT_PROFILE", None)
-    chart = Path(__file__).resolve().parents[1] / "helm" / "trading"
+    chart = Path(__file__).resolve().parent / "chart"
     def run(command):
         subprocess.run(command, env=child_env, check=True)
     with tempfile.TemporaryDirectory(prefix="etp-release-") as directory:
@@ -67,10 +63,7 @@ def main():
              "--cache-control", "public,max-age=31536000,immutable", "--only-show-errors"])
         run(["aws", "s3", "cp", str(args.frontend / "index.html"), bucket + "/index.html",
              "--cache-control", "no-cache,no-store,must-revalidate", "--content-type", "text/html", "--only-show-errors"])
-        cloudfront = boto3.client("cloudfront", region_name=args.region,
-                                 aws_access_key_id=credentials["AccessKeyId"],
-                                 aws_secret_access_key=credentials["SecretAccessKey"],
-                                 aws_session_token=credentials["SessionToken"])
+        cloudfront = session.client("cloudfront")
         import uuid
         result = cloudfront.create_invalidation(DistributionId=settings["DistributionId"], InvalidationBatch={
             "CallerReference": str(uuid.uuid4()), "Paths": {"Quantity": 1, "Items": ["/*"]},
@@ -79,9 +72,16 @@ def main():
     urls = [settings["FrontendUrl"], settings["ApiUrl"] + "/actuator/health",
             settings["AuthUrl"] + "/docs/json", settings["AnalyticsUrl"] + "/index.html"]
     for url in urls:
-        with urllib.request.urlopen(url, timeout=30) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Smoke check failed: {url}")
+        for attempt in range(12):
+            try:
+                with urllib.request.urlopen(url, timeout=15) as response:
+                    if response.status != 200:
+                        raise RuntimeError(f"Smoke check failed: {url}")
+                break
+            except (urllib.error.URLError, TimeoutError):
+                if attempt == 11:
+                    raise
+                time.sleep(10)
         print(f"HTTP smoke check passed: {url}")
     args.record.write_text(json.dumps({"environment": settings["EnvironmentId"], "images": images,
                                       "frontendUrl": settings["FrontendUrl"], "httpSmokeChecks": urls}, indent=2) + "\n")

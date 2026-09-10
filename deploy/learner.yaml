@@ -1,0 +1,677 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Graduate entry point. Use your assigned stack name, such as s001. Creates your environment and starts Jenkins.
+Parameters:
+  PlatformName: {Type: String, AllowedPattern: '[a-z][a-z0-9-]{2,24}'}
+  GitHubRepository:
+    Type: String
+    Description: Your group GitHub HTTPS repository in the approved organisation.
+    AllowedPattern: https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+(?:\.git)?
+  GitHubBranch: {Type: String, Default: main, AllowedPattern: '[A-Za-z0-9][A-Za-z0-9_./-]{0,100}'}
+Resources:
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Private student database credentials. Provisioned automatically during learner stack creation.
+      Name: {'Fn::Sub': ['${PlatformName}/${EnvironmentId}/database', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+      GenerateSecretString:
+        SecretStringTemplate:
+          Fn::Sub:
+          - '{"username":"etp_${EnvironmentId}","database":"etp_${EnvironmentId}","host":"${DatabaseHost}","port":5432}'
+          - {EnvironmentId: {Ref: 'AWS::StackName'}, DatabaseHost: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-DatabaseHost'}}}
+        GenerateStringKey: password
+        PasswordLength: 40
+        ExcludePunctuation: true
+      Tags:
+      - {Key: Platform, Value: {Ref: PlatformName}}
+      - {Key: Environment, Value: {Ref: 'AWS::StackName'}}
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: {'Fn::Sub': ['${PlatformName}/${EnvironmentId}/jwt', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+      GenerateSecretString: {SecretStringTemplate: '{}', GenerateStringKey: JWT_SECRET, PasswordLength: 64, ExcludePunctuation: true}
+  UiBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+      BucketEncryption: {ServerSideEncryptionConfiguration: [{ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}}]}
+      VersioningConfiguration: {Status: Enabled}
+      LifecycleConfiguration:
+        Rules:
+        - Id: RemoveOldVersions
+          Status: Enabled
+          NoncurrentVersionExpiration: {NoncurrentDays: 7}
+          AbortIncompleteMultipartUpload: {DaysAfterInitiation: 1}
+      Tags:
+      - {Key: Platform, Value: {Ref: PlatformName}}
+      - {Key: Environment, Value: {Ref: 'AWS::StackName'}}
+      BucketName: {'Fn::Sub': ['${PlatformName}-${AWS::AccountId}-${AWS::Region}-${EnvironmentId}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: {'Fn::Sub': '${PlatformName}-${AWS::StackName}-s3'}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  SpaRouting:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: {'Fn::Sub': '${PlatformName}-${AWS::StackName}-spa'}
+      AutoPublish: true
+      FunctionConfig: {Comment: Angular deep links, Runtime: cloudfront-js-2.0}
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var segment = request.uri.substring(request.uri.lastIndexOf('/') + 1);
+          if (segment.indexOf('.') === -1) request.uri = '/index.html';
+          return request;
+        }
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_200
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Origins:
+        - Id: private-s3
+          DomainName: {'Fn::GetAtt': [UiBucket, RegionalDomainName]}
+          OriginAccessControlId: {'Fn::GetAtt': [OriginAccessControl, Id]}
+          S3OriginConfig: {OriginAccessIdentity: ''}
+        DefaultCacheBehavior:
+          TargetOriginId: private-s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: {Ref: UiCachePolicy}
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+          FunctionAssociations:
+          - {EventType: viewer-request, FunctionARN: {'Fn::GetAtt': [SpaRouting, FunctionARN]}}
+        ViewerCertificate: {CloudFrontDefaultCertificate: true}
+      Tags:
+      - {Key: Platform, Value: {Ref: PlatformName}}
+      - {Key: Environment, Value: {Ref: 'AWS::StackName'}}
+  UiCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: {'Fn::Sub': '${PlatformName}-${AWS::StackName}-ui'}
+        MinTTL: 0
+        DefaultTTL: 86400
+        MaxTTL: 31536000
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          CookiesConfig: {CookieBehavior: none}
+          HeadersConfig: {HeaderBehavior: none}
+          QueryStringsConfig: {QueryStringBehavior: none}
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: {Ref: UiBucket}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: CloudFrontOnly
+          Effect: Allow
+          Principal: {Service: cloudfront.amazonaws.com}
+          Action: s3:GetObject
+          Resource: {'Fn::Sub': '${UiBucket.Arn}/*'}
+          Condition: {StringEquals: {'AWS:SourceArn': {'Fn::Sub': 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'}}}
+        - Sid: RequireTls
+          Effect: Deny
+          Principal: '*'
+          Action: s3:*
+          Resource:
+          - {'Fn::GetAtt': [UiBucket, Arn]}
+          - {'Fn::Sub': '${UiBucket.Arn}/*'}
+          Condition: {Bool: {'aws:SecureTransport': false}}
+        - Sid: PrivateReleaseEvidence
+          Effect: Deny
+          Principal: {Service: cloudfront.amazonaws.com}
+          Action: s3:GetObject
+          Resource: {'Fn::Sub': '${UiBucket.Arn}/_releases/*'}
+  ApplicationLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: {'Fn::Sub': ['/fidelity/${PlatformName}/etp-${EnvironmentId}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+      RetentionInDays: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-LogRetentionDays'}}
+  ApiTargets:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-VpcId'}}
+      TargetType: ip
+      Protocol: HTTP
+      Port: 8080
+      HealthCheckPath: /actuator/health
+      Matcher: {HttpCode: '200'}
+      TargetGroupAttributes:
+      - {Key: deregistration_delay.timeout_seconds, Value: '15'}
+      Tags:
+      - {Key: Platform, Value: {Ref: PlatformName}}
+  AuthTargets:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-VpcId'}}
+      TargetType: ip
+      Protocol: HTTP
+      Port: 3000
+      HealthCheckPath: /docs/json
+      Matcher: {HttpCode: '200'}
+      TargetGroupAttributes:
+      - {Key: deregistration_delay.timeout_seconds, Value: '15'}
+      Tags:
+      - {Key: Platform, Value: {Ref: PlatformName}}
+  AnalyticsTargets:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-VpcId'}}
+      TargetType: ip
+      Protocol: HTTP
+      Port: 8000
+      HealthCheckPath: /
+      Matcher: {HttpCode: '200'}
+      TargetGroupAttributes:
+      - {Key: deregistration_delay.timeout_seconds, Value: '15'}
+      Tags:
+      - {Key: Platform, Value: {Ref: PlatformName}}
+  ApiRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-ListenerArn${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                  Alb]}}]}
+      Priority: {'Fn::Sub': ['${ListenerSlot}1', {ListenerSlot: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'}, Slot]}}]}
+      Conditions:
+      - Field: host-header
+        Values:
+        - Fn::Sub:
+          - api-${EnvironmentId}.${BaseDomain}
+          - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+      Actions:
+      - {Type: forward, TargetGroupArn: {Ref: ApiTargets}}
+  AuthRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-ListenerArn${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                  Alb]}}]}
+      Priority: {'Fn::Sub': ['${ListenerSlot}2', {ListenerSlot: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'}, Slot]}}]}
+      Conditions:
+      - Field: host-header
+        Values:
+        - Fn::Sub:
+          - auth-${EnvironmentId}.${BaseDomain}
+          - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+      Actions:
+      - {Type: forward, TargetGroupArn: {Ref: AuthTargets}}
+  AnalyticsRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-ListenerArn${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                  Alb]}}]}
+      Priority: {'Fn::Sub': ['${ListenerSlot}3', {ListenerSlot: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'}, Slot]}}]}
+      Conditions:
+      - Field: host-header
+        Values:
+        - Fn::Sub:
+          - report-${EnvironmentId}.${BaseDomain}
+          - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+      - {Field: path-pattern, Values: [/, /index.html]}
+      Actions:
+      - {Type: forward, TargetGroupArn: {Ref: AnalyticsTargets}}
+  Dns:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-HostedZoneId'}}
+      RecordSets:
+      - Name:
+          Fn::Sub:
+          - api-${EnvironmentId}.${BaseDomain}
+          - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+        Type: A
+        AliasTarget:
+          DNSName:
+            Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-AlbDns${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                      Alb]}}]}
+          HostedZoneId:
+            Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-AlbZone${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                      Alb]}}]}
+          EvaluateTargetHealth: false
+      - Name:
+          Fn::Sub:
+          - auth-${EnvironmentId}.${BaseDomain}
+          - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+        Type: A
+        AliasTarget:
+          DNSName:
+            Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-AlbDns${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                      Alb]}}]}
+          HostedZoneId:
+            Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-AlbZone${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                      Alb]}}]}
+          EvaluateTargetHealth: false
+      - Name:
+          Fn::Sub:
+          - report-${EnvironmentId}.${BaseDomain}
+          - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+        Type: A
+        AliasTarget:
+          DNSName:
+            Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-AlbDns${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                      Alb]}}]}
+          HostedZoneId:
+            Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-AlbZone${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                      Alb]}}]}
+          EvaluateTargetHealth: false
+  ApiErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: API target returned at least five HTTP 5xx responses in five minutes. Visible in CloudWatch; attach notifications
+        separately.
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+      - {Name: TargetGroup, Value: {'Fn::GetAtt': [ApiTargets, TargetGroupFullName]}}
+      - Name: LoadBalancer
+        Value:
+          Fn::Join:
+          - /
+          - - Fn::Select:
+              - 1
+              - Fn::Split:
+                - /
+                - Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-ListenerArn${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                            Alb]}}]}
+            - Fn::Select:
+              - 2
+              - Fn::Split:
+                - /
+                - Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-ListenerArn${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                            Alb]}}]}
+            - Fn::Select:
+              - 3
+              - Fn::Split:
+                - /
+                - Fn::ImportValue: {'Fn::Sub': ['${PlatformName}-ListenerArn${Letter}', {Letter: {'Fn::FindInMap': [Students, {Ref: 'AWS::StackName'},
+                            Alb]}}]}
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmName: {'Fn::Sub': '${PlatformName}-${AWS::StackName}-api-errors'}
+  ReleaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: codebuild.amazonaws.com}
+          Action: sts:AssumeRole
+          Condition:
+            StringEquals: {'aws:SourceAccount': {Ref: 'AWS::AccountId'}}
+            ArnEquals:
+              aws:SourceArn:
+                Fn::Sub:
+                - arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${PlatformName}-${EnvironmentId}
+                - {EnvironmentId: {Ref: 'AWS::StackName'}}
+      Policies:
+      - PolicyName: ReleaseThisEnvironment
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: eks:DescribeCluster
+            Resource:
+              Fn::Sub:
+              - arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
+              - {ClusterName: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-ClusterName'}}}
+          - {Effect: Allow, Action: 's3:ListBucket', Resource: {'Fn::GetAtt': [UiBucket, Arn]}}
+          - {Effect: Allow, Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'], Resource: {'Fn::Sub': '${UiBucket.Arn}/*'}}
+          - Effect: Allow
+            Action: ['cloudfront:CreateInvalidation', 'cloudfront:GetInvalidation']
+            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'}
+          - Effect: Allow
+            Action: ['cloudformation:DescribeStacks', 'cloudformation:DescribeStackEvents']
+            Resource: {Ref: 'AWS::StackId'}
+          - Effect: Allow
+            Action: ['logs:FilterLogEvents', 'logs:GetLogEvents', 'logs:DescribeLogStreams']
+            Resource: {'Fn::GetAtt': [ApplicationLogs, Arn]}
+          - Effect: Allow
+            Action: ['s3:GetObject']
+            Resource:
+              Fn::Sub:
+              - arn:${AWS::Partition}:s3:::${AssetBucket}/${AssetPrefix}/runtime.zip
+              - AssetBucket: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-AssetBucket'}}
+                AssetPrefix: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-AssetPrefix'}}
+          - {Effect: Allow, Action: ['secretsmanager:GetSecretValue'], Resource: [{Ref: DatabaseSecret}, {Ref: RegistrySecret}]}
+          - {Effect: Allow, Action: ['logs:CreateLogStream', 'logs:PutLogEvents'], Resource: {'Fn::GetAtt': [BuildLogs, Arn]}}
+          - Effect: Allow
+            Action: ['codeconnections:GetConnection', 'codeconnections:GetConnectionToken']
+            Resource: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-GitHubConnectionArn'}}
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeDhcpOptions
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+            - ec2:DescribeSubnets
+            - ec2:DescribeSecurityGroups
+            - ec2:DescribeVpcs
+            Resource: '*'
+          - Effect: Allow
+            Action: ec2:CreateNetworkInterfacePermission
+            Resource: {'Fn::Sub': 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'}
+            Condition:
+              StringEquals: {'ec2:AuthorizedService': codebuild.amazonaws.com}
+              ArnEquals:
+                ec2:Subnet:
+                - Fn::Sub:
+                  - arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${SubnetId}
+                  - {SubnetId: {'Fn::Select': [0, {'Fn::Split': [',', {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-PrivateSubnetIds'}}]}]}}
+                - Fn::Sub:
+                  - arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${SubnetId}
+                  - {SubnetId: {'Fn::Select': [1, {'Fn::Split': [',', {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-PrivateSubnetIds'}}]}]}}
+          - Effect: Allow
+            Action: ['s3:GetBucketAcl', 's3:GetBucketLocation']
+            Resource:
+              Fn::Sub:
+              - arn:${AWS::Partition}:s3:::${AssetBucket}
+              - {AssetBucket: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-AssetBucket'}}}
+      RoleName: {'Fn::Sub': ['${PlatformName}-${EnvironmentId}-build', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+  ReleaseAccess:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-ClusterName'}}
+      PrincipalArn: {'Fn::GetAtt': [ReleaseRole, Arn]}
+      Type: STANDARD
+      KubernetesGroups:
+      - {'Fn::Sub': ['etp:${EnvironmentId}:deploy', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+  RegistrySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: {'Fn::Sub': ['${PlatformName}/${EnvironmentId}/registry', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+      GenerateSecretString:
+        SecretStringTemplate: {'Fn::Sub': ['{"username":"${PlatformName}-${EnvironmentId}"}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+        GenerateStringKey: password
+        PasswordLength: 40
+        ExcludePunctuation: true
+  BuildLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: {'Fn::Sub': ['/fidelity/${PlatformName}/build-${EnvironmentId}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+      RetentionInDays: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-LogRetentionDays'}}
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    DependsOn: [ReleaseAccess]
+    Properties:
+      Name: {'Fn::Sub': ['${PlatformName}-${EnvironmentId}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+      ServiceRole: {'Fn::GetAtt': [ReleaseRole, Arn]}
+      TimeoutInMinutes: 30
+      QueuedTimeoutInMinutes: 5
+      ConcurrentBuildLimit: 1
+      Artifacts: {Type: NO_ARTIFACTS}
+      Source:
+        Type: S3
+        Location:
+          Fn::Sub:
+          - ${AssetBucket}/${AssetPrefix}/runtime.zip
+          - AssetBucket: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-AssetBucket'}}
+            AssetPrefix: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-AssetPrefix'}}
+        BuildSpec: runtime/release-buildspec.yaml
+      SecondarySources:
+      - SourceIdentifier: application
+        Type: GITHUB
+        Location: {Ref: GitHubRepository}
+        GitCloneDepth: 1
+        Auth: {Type: CODECONNECTIONS, Resource: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-GitHubConnectionArn'}}}
+      SecondarySourceVersions:
+      - {SourceIdentifier: application, SourceVersion: {Ref: GitHubBranch}}
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BuildImage'}}
+        PrivilegedMode: true
+        EnvironmentVariables:
+        - {Name: ENVIRONMENT_ID, Value: {Ref: 'AWS::StackName'}}
+        - {Name: PLATFORM_NAME, Value: {Ref: PlatformName}}
+        - Name: SETTINGS_JSON
+          Value:
+            Fn::Sub:
+            - '{"EnvironmentId": "${V0}", "Namespace": "${V1}", "PlatformName": "${V2}", "ClusterName": "${V3}", "DatabaseHost": "${V4}",
+              "DatabaseSecretArn": "${V5}", "JwtSecretArn": "${V6}", "BucketName": "${V7}", "DistributionId": "${V8}", "FrontendUrl":
+              "${V9}", "ApiUrl": "${V10}", "AuthUrl": "${V11}", "AnalyticsUrl": "${V12}", "ApiTargetGroupArn": "${V13}", "AuthTargetGroupArn":
+              "${V14}", "AnalyticsTargetGroupArn": "${V15}", "ReleaseRoleArn": "${V16}", "LogGroupName": "${V17}", "RegistrySecretArn":
+              "${V18}"}'
+            - V0: {Ref: 'AWS::StackName'}
+              V1: {'Fn::Sub': ['etp-${EnvironmentId}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+              V2: {Ref: PlatformName}
+              V3: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-ClusterName'}}
+              V4: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-DatabaseHost'}}
+              V5: {Ref: DatabaseSecret}
+              V6: {Ref: JwtSecret}
+              V7: {Ref: UiBucket}
+              V8: {Ref: Distribution}
+              V9: {'Fn::Sub': 'https://${Distribution.DomainName}'}
+              V10:
+                Fn::Sub:
+                - https://api-${EnvironmentId}.${BaseDomain}
+                - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+              V11:
+                Fn::Sub:
+                - https://auth-${EnvironmentId}.${BaseDomain}
+                - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+              V12:
+                Fn::Sub:
+                - https://report-${EnvironmentId}.${BaseDomain}
+                - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+              V13: {Ref: ApiTargets}
+              V14: {Ref: AuthTargets}
+              V15: {Ref: AnalyticsTargets}
+              V16: {'Fn::GetAtt': [ReleaseRole, Arn]}
+              V17: {Ref: ApplicationLogs}
+              V18: {Ref: RegistrySecret}
+      VpcConfig:
+        VpcId: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-VpcId'}}
+        Subnets: {'Fn::Split': [',', {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-PrivateSubnetIds'}}]}
+        SecurityGroupIds:
+        - {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BuildSecurityGroupId'}}
+      LogsConfig: {CloudWatchLogs: {Status: ENABLED, GroupName: {Ref: BuildLogs}}}
+  EnvironmentSetup:
+    Type: Custom::FidelityLearner
+    DependsOn: [ReleaseAccess, ApiRule, AuthRule, AnalyticsRule, BucketPolicy]
+    Properties:
+      ServiceToken: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-SetupFunctionArn'}}
+      ServiceTimeout: 1000
+      GitHubRepository: {Ref: GitHubRepository}
+      GitHubBranch: {Ref: GitHubBranch}
+      EnvironmentId: {Ref: 'AWS::StackName'}
+      Namespace: {'Fn::Sub': ['etp-${EnvironmentId}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}
+      PlatformName: {Ref: PlatformName}
+      ClusterName: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-ClusterName'}}
+      DatabaseHost: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-DatabaseHost'}}
+      DatabaseSecretArn: {Ref: DatabaseSecret}
+      JwtSecretArn: {Ref: JwtSecret}
+      BucketName: {Ref: UiBucket}
+      DistributionId: {Ref: Distribution}
+      FrontendUrl: {'Fn::Sub': 'https://${Distribution.DomainName}'}
+      ApiUrl:
+        Fn::Sub:
+        - https://api-${EnvironmentId}.${BaseDomain}
+        - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+      AuthUrl:
+        Fn::Sub:
+        - https://auth-${EnvironmentId}.${BaseDomain}
+        - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+      AnalyticsUrl:
+        Fn::Sub:
+        - https://report-${EnvironmentId}.${BaseDomain}
+        - {EnvironmentId: {Ref: 'AWS::StackName'}, BaseDomain: {'Fn::ImportValue': {'Fn::Sub': '${PlatformName}-BaseDomain'}}}
+      ApiTargetGroupArn: {Ref: ApiTargets}
+      AuthTargetGroupArn: {Ref: AuthTargets}
+      AnalyticsTargetGroupArn: {Ref: AnalyticsTargets}
+      ReleaseRoleArn: {'Fn::GetAtt': [ReleaseRole, Arn]}
+      LogGroupName: {Ref: ApplicationLogs}
+      RegistrySecretArn: {Ref: RegistrySecret}
+      BuildProjectName: {Ref: BuildProject}
+Outputs:
+  ApplicationUrl: {Value: {'Fn::Sub': 'https://${Distribution.DomainName}'}}
+  JenkinsUrl: {Value: {'Fn::GetAtt': [EnvironmentSetup, JenkinsUrl]}}
+  ApiUrl: {Value: {'Fn::GetAtt': [EnvironmentSetup, ApiUrl]}}
+  AuthUrl: {Value: {'Fn::GetAtt': [EnvironmentSetup, AuthUrl]}}
+  AnalyticsUrl: {Value: {'Fn::GetAtt': [EnvironmentSetup, AnalyticsUrl]}}
+  Namespace: {Value: {'Fn::Sub': ['etp-${EnvironmentId}', {EnvironmentId: {Ref: 'AWS::StackName'}}]}}
+  LogGroupName: {Value: {Ref: ApplicationLogs}}
+Mappings:
+  Students:
+    s001: {Alb: A, Slot: 1}
+    s002: {Alb: A, Slot: 2}
+    s003: {Alb: A, Slot: 3}
+    s004: {Alb: A, Slot: 4}
+    s005: {Alb: A, Slot: 5}
+    s006: {Alb: A, Slot: 6}
+    s007: {Alb: A, Slot: 7}
+    s008: {Alb: A, Slot: 8}
+    s009: {Alb: A, Slot: 9}
+    s010: {Alb: A, Slot: 10}
+    s011: {Alb: A, Slot: 11}
+    s012: {Alb: A, Slot: 12}
+    s013: {Alb: A, Slot: 13}
+    s014: {Alb: A, Slot: 14}
+    s015: {Alb: A, Slot: 15}
+    s016: {Alb: A, Slot: 16}
+    s017: {Alb: A, Slot: 17}
+    s018: {Alb: A, Slot: 18}
+    s019: {Alb: A, Slot: 19}
+    s020: {Alb: A, Slot: 20}
+    s021: {Alb: A, Slot: 21}
+    s022: {Alb: A, Slot: 22}
+    s023: {Alb: A, Slot: 23}
+    s024: {Alb: A, Slot: 24}
+    s025: {Alb: A, Slot: 25}
+    s026: {Alb: A, Slot: 26}
+    s027: {Alb: A, Slot: 27}
+    s028: {Alb: A, Slot: 28}
+    s029: {Alb: A, Slot: 29}
+    s030: {Alb: A, Slot: 30}
+    s031: {Alb: B, Slot: 1}
+    s032: {Alb: B, Slot: 2}
+    s033: {Alb: B, Slot: 3}
+    s034: {Alb: B, Slot: 4}
+    s035: {Alb: B, Slot: 5}
+    s036: {Alb: B, Slot: 6}
+    s037: {Alb: B, Slot: 7}
+    s038: {Alb: B, Slot: 8}
+    s039: {Alb: B, Slot: 9}
+    s040: {Alb: B, Slot: 10}
+    s041: {Alb: B, Slot: 11}
+    s042: {Alb: B, Slot: 12}
+    s043: {Alb: B, Slot: 13}
+    s044: {Alb: B, Slot: 14}
+    s045: {Alb: B, Slot: 15}
+    s046: {Alb: B, Slot: 16}
+    s047: {Alb: B, Slot: 17}
+    s048: {Alb: B, Slot: 18}
+    s049: {Alb: B, Slot: 19}
+    s050: {Alb: B, Slot: 20}
+    s051: {Alb: B, Slot: 21}
+    s052: {Alb: B, Slot: 22}
+    s053: {Alb: B, Slot: 23}
+    s054: {Alb: B, Slot: 24}
+    s055: {Alb: B, Slot: 25}
+    s056: {Alb: B, Slot: 26}
+    s057: {Alb: B, Slot: 27}
+    s058: {Alb: B, Slot: 28}
+    s059: {Alb: B, Slot: 29}
+    s060: {Alb: B, Slot: 30}
+    s061: {Alb: C, Slot: 1}
+    s062: {Alb: C, Slot: 2}
+    s063: {Alb: C, Slot: 3}
+    s064: {Alb: C, Slot: 4}
+    s065: {Alb: C, Slot: 5}
+    s066: {Alb: C, Slot: 6}
+    s067: {Alb: C, Slot: 7}
+    s068: {Alb: C, Slot: 8}
+    s069: {Alb: C, Slot: 9}
+    s070: {Alb: C, Slot: 10}
+    s071: {Alb: C, Slot: 11}
+    s072: {Alb: C, Slot: 12}
+    s073: {Alb: C, Slot: 13}
+    s074: {Alb: C, Slot: 14}
+    s075: {Alb: C, Slot: 15}
+    s076: {Alb: C, Slot: 16}
+    s077: {Alb: C, Slot: 17}
+    s078: {Alb: C, Slot: 18}
+    s079: {Alb: C, Slot: 19}
+    s080: {Alb: C, Slot: 20}
+    s081: {Alb: C, Slot: 21}
+    s082: {Alb: C, Slot: 22}
+    s083: {Alb: C, Slot: 23}
+    s084: {Alb: C, Slot: 24}
+    s085: {Alb: C, Slot: 25}
+    s086: {Alb: C, Slot: 26}
+    s087: {Alb: C, Slot: 27}
+    s088: {Alb: C, Slot: 28}
+    s089: {Alb: C, Slot: 29}
+    s090: {Alb: C, Slot: 30}
+    s091: {Alb: D, Slot: 1}
+    s092: {Alb: D, Slot: 2}
+    s093: {Alb: D, Slot: 3}
+    s094: {Alb: D, Slot: 4}
+    s095: {Alb: D, Slot: 5}
+    s096: {Alb: D, Slot: 6}
+    s097: {Alb: D, Slot: 7}
+    s098: {Alb: D, Slot: 8}
+    s099: {Alb: D, Slot: 9}
+    s100: {Alb: D, Slot: 10}
+    s101: {Alb: D, Slot: 11}
+    s102: {Alb: D, Slot: 12}
+    s103: {Alb: D, Slot: 13}
+    s104: {Alb: D, Slot: 14}
+    s105: {Alb: D, Slot: 15}
+    s106: {Alb: D, Slot: 16}
+    s107: {Alb: D, Slot: 17}
+    s108: {Alb: D, Slot: 18}
+    s109: {Alb: D, Slot: 19}
+    s110: {Alb: D, Slot: 20}
+    s111: {Alb: D, Slot: 21}
+    s112: {Alb: D, Slot: 22}
+    s113: {Alb: D, Slot: 23}
+    s114: {Alb: D, Slot: 24}
+    s115: {Alb: D, Slot: 25}
+    s116: {Alb: D, Slot: 26}
+    s117: {Alb: D, Slot: 27}
+    s118: {Alb: D, Slot: 28}
+    s119: {Alb: D, Slot: 29}
+    s120: {Alb: D, Slot: 30}
+    s121: {Alb: E, Slot: 1}
+    s122: {Alb: E, Slot: 2}
+    s123: {Alb: E, Slot: 3}
+    s124: {Alb: E, Slot: 4}
+    s125: {Alb: E, Slot: 5}
+    s126: {Alb: E, Slot: 6}
+    s127: {Alb: E, Slot: 7}
+    s128: {Alb: E, Slot: 8}
+    s129: {Alb: E, Slot: 9}
+    s130: {Alb: E, Slot: 10}
+    s131: {Alb: E, Slot: 11}
+    s132: {Alb: E, Slot: 12}
+    s133: {Alb: E, Slot: 13}
+    s134: {Alb: E, Slot: 14}
+    s135: {Alb: E, Slot: 15}
+    s136: {Alb: E, Slot: 16}
+    s137: {Alb: E, Slot: 17}
+    s138: {Alb: E, Slot: 18}
+    s139: {Alb: E, Slot: 19}
+    s140: {Alb: E, Slot: 20}
+    s141: {Alb: E, Slot: 21}
+    s142: {Alb: E, Slot: 22}
+    s143: {Alb: E, Slot: 23}

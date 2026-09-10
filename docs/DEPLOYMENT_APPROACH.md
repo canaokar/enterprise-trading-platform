@@ -1,3 +1,5 @@
+> Superseded by the [two-part deployment kit](../deploy/README.md). The current model gives each of 143 graduates a separate environment.
+
 **Fidelity graduate deployment approach**
 
 Status: proposal for engineering and delivery review. Updated 5 September 2026.
@@ -133,4 +135,4 @@ Before handover, engineering must provide:
 
 Obtain agreement on group environments with individual release assessment, regional group counts and simultaneous usage. Confirm JFrog availability and licensing before finalising the bill of materials.
 
-Implementation starter: [CloudFormation templates and deployment runbook](../deploy/cloudformation/README.md). The kit separates trusted infrastructure provisioning from the student-editable application pipeline. It includes local validation; an AWS pilot remains required.
+Implementation starter: [CloudFormation templates and deployment runbook](../deploy/README.md). The kit separates trusted infrastructure provisioning from the student-editable application pipeline. It includes local validation; an AWS pilot remains required.
