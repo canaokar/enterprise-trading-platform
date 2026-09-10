@@ -207,11 +207,13 @@ def main():
         subprocess.run(["aws", "eks", "update-kubeconfig", "--name", shared["ClusterName"], "--region", args.region], check=True)
         apply(namespace_documents(shared, student))
         auth = base64.b64encode((os.environ["JFROG_USER"] + ":" + os.environ["JFROG_TOKEN"]).encode()).decode()
-        docker = {"auths": {os.environ["JFROG_HOST"]: {"auth": auth}}}
+        docker = {"auths": {shared["JFrogHost"]: {"auth": auth}}}
         apply([application_secret(database, secret(student["JwtSecretArn"]), student["Namespace"]),
                resource("ConfigMap", "rds-ca", student["Namespace"], data={"ca.pem": args.ca.read_text()}),
                resource("Secret", "jfrog-pull", student["Namespace"], type="kubernetes.io/dockerconfigjson",
                         data={".dockerconfigjson": base64.b64encode(json.dumps(docker).encode()).decode()})])
+    student["JFrogHost"] = shared["JFrogHost"]
+    student["ImagePrefix"] = f"{shared['JFrogHost']}/{shared['JFrogRepository']}/{shared['PlatformName']}/{args.student}"
     args.outputs.write_text(json.dumps(student, indent=2) + "\n")
 
 

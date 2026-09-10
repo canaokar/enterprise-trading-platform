@@ -1,9 +1,9 @@
 # Deployment approach
 
-Use one shared AWS platform per regional cohort and one application environment per graduate. Plan for 143 environments, with separate databases and Kubernetes namespaces.
+Use one shared AWS platform per regional cohort and one application environment per graduate.
 
-Engineering launches the shared CloudFormation template and prepares EKS, Jenkins, JFrog and access. Graduates launch their CloudFormation template and run their assigned Jenkins job. Jenkins builds from GitHub, publishes images to JFrog and deploys the application.
+Engineering launches the shared CFT, which creates VPC, EKS, RDS, ALBs, certificates and logging, installs the cluster components and creates the Jenkins jobs. Existing Jenkins/JFrog services and account access are engineering prerequisites.
 
-CloudFormation owns AWS resources. Engineering maintains the Kubernetes and database preparation run by Jenkins. Instructors guide students through stack creation, builds and the application demonstration.
+Graduates launch their learner CFT and run the linked Jenkins job. Each gets their own containers, Kafka, database, secrets and frontend. Jenkins uses a common pool of disposable build agents with temporary permissions for the current student.
 
-The [deployment guide](../deploy/README.md) defines the two parts, resource ownership, setup and cleanup. The [engineering brief](DEPLOYMENT_ENGINEERING_BRIEF.md) is the short handover.
+Follow the [deployment guide](../deploy/README.md). Instructors guide deployment and diagnose code failures; engineering supports shared infrastructure.

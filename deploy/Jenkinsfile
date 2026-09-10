@@ -8,40 +8,41 @@ pipeline {
   }
   triggers { pollSCM('H/2 * * * *') }
   environment {
-    AWS_REGION = 'ap-south-1'
-    SHARED_STACK = 'fidelity-india-shared'
-    STUDENT_ID = 's001'
-    REPOSITORY = 'https://github.com/REPLACE/team-repository.git'
-    BRANCH = 'main'
-    JFROG_HOST = 'REPLACE.jfrog.io'
-    IMAGE_PREFIX = 'REPLACE.jfrog.io/docker-local/fidelity-india/s001'
+    AWS_REGION = "${env.JOB_NAME.tokenize('/')[0]}"
+    PLATFORM_NAME = "${env.JOB_BASE_NAME.replaceFirst('-s[0-9]{3}$', '')}"
+    STUDENT_ID = "${env.JOB_BASE_NAME.tokenize('-').last()}"
+    SHARED_STACK = "${env.PLATFORM_NAME}-shared"
   }
   stages {
     stage('Prepare environment') {
-      agent { label 'platform' }
+      agent { label "platform-${env.PLATFORM_NAME}" }
       steps {
-        withCredentials([usernamePassword(credentialsId: 'jfrog-s001', usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_TOKEN')]) {
+        withCredentials([usernamePassword(credentialsId: "jfrog-${env.STUDENT_ID}", usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_TOKEN')]) {
           sh '''
             /opt/fidelity/.venv/bin/python /opt/fidelity/deploy/prepare.py prepare \
               --region "$AWS_REGION" --shared-stack "$SHARED_STACK" --student "$STUDENT_ID"
           '''
         }
+        script {
+          def settings = readJSON file: 'environment.json'
+          env.RELEASE_ROLE = settings.ReleaseRoleArn
+          env.REPOSITORY = settings.RepositoryUrl
+          env.BRANCH = settings.Branch
+          env.JFROG_HOST = settings.JFrogHost
+          env.IMAGE_PREFIX = settings.ImagePrefix
+        }
         stash name: 'environment', includes: 'environment.json'
       }
     }
     stage('Build and deploy') {
-      agent { label 's001' }
+      agent { label "training-build-${env.PLATFORM_NAME}" }
       steps {
         git url: env.REPOSITORY, branch: env.BRANCH, credentialsId: 'github-read'
         unstash 'environment'
-        withCredentials([usernamePassword(credentialsId: 'jfrog-s001', usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_TOKEN')]) {
-          sh '''#!/usr/bin/env bash
+        withAWS(role: env.RELEASE_ROLE, region: env.AWS_REGION, roleSessionName: env.STUDENT_ID, useNode: false) {
+          withCredentials([usernamePassword(credentialsId: "jfrog-${env.STUDENT_ID}", usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_TOKEN')]) {
+            sh '''#!/usr/bin/env bash
 set -euo pipefail
-role=$(jq -r .ReleaseRoleArn environment.json)
-credentials=$(aws sts assume-role --role-arn "$role" --role-session-name "$STUDENT_ID" \
-  --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)
-read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN <<< "$credentials"
-export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 export KUBECONFIG="$WORKSPACE/kubeconfig"
 export DOCKER_CONFIG=$(mktemp -d)
 trap 'rm -rf "$DOCKER_CONFIG" "$KUBECONFIG"' EXIT
@@ -96,6 +97,7 @@ for url in "$(jq -r .FrontendUrl environment.json)" "$(jq -r .ApiUrl environment
   curl --fail --retry 12 --retry-all-errors --retry-delay 5 --max-time 15 "$url" >/dev/null
 done
 '''
+          }
         }
         archiveArtifacts artifacts: 'environment.json,values.yaml', fingerprint: true
       }

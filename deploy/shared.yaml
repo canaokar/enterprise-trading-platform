@@ -1,6 +1,35 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Shared training infrastructure. Engineering configures EKS and Jenkins after this stack completes.
+Description: Shared training infrastructure and automatic EKS setup.
 Parameters:
+  JenkinsApiSecretArn:
+    Type: String
+    Description: Existing Secrets Manager secret containing Jenkins username and apiToken.
+    AllowedPattern: arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+
+  JFrogHost:
+    Type: String
+    Description: JFrog registry hostname, without https://.
+    AllowedPattern: '[a-z0-9][a-z0-9.-]+'
+  JFrogRepository:
+    Type: String
+    Default: docker-local
+    AllowedPattern: '[a-zA-Z0-9_.-]+'
+  DeploymentRepositoryUrl:
+    Type: String
+    Default: https://github.com/canaokar/enterprise-trading-platform.git
+    AllowedPattern: https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git
+  DeploymentRevision:
+    Type: String
+    Default: reference
+    Description: Engineering-controlled deployment kit branch or commit.
+  StudentCount:
+    Type: Number
+    Default: 143
+    MinValue: 1
+    MaxValue: 143
+  FirstStudentNumber: {Type: Number, Default: 1, MinValue: 1, MaxValue: 143}
+  BootstrapAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
   PlatformName: {Type: String, Default: fidelity-lab, AllowedPattern: '[a-z][a-z0-9-]{2,19}'}
   KubernetesVersion:
     Type: String
@@ -8,7 +37,7 @@ Parameters:
     AllowedPattern: 1\.[0-9]{2}
   PlatformAdminRoleArn:
     Type: String
-    Description: Existing IAM role used by engineering. Use an IAM role ARN, not an STS session ARN.
+    Description: Existing engineering role used by the Jenkins controller and platform agent. Use an IAM role ARN.
     AllowedPattern: arn:aws:iam::[0-9]{12}:role/.+
   ApiAccessCidr:
     Type: String
@@ -524,7 +553,342 @@ Resources:
       FromPort: 443
       ToPort: 443
       SourceSecurityGroupId: {Ref: JenkinsSecurityGroup}
+  BootstrapRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+      - PolicyName: InitialiseCluster
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: eks:DescribeCluster
+            Resource:
+              Fn::GetAtt:
+              - Cluster
+              - Arn
+          - Effect: Allow
+            Action:
+            - cloudformation:DescribeStackResource
+            - cloudformation:SignalResource
+            Resource:
+              Ref: AWS::StackId
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource:
+              Ref: JenkinsApiSecretArn
+  BootstrapProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - Ref: BootstrapRole
+  BootstrapAccess:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName:
+        Ref: Cluster
+      PrincipalArn:
+        Fn::GetAtt:
+        - BootstrapRole
+        - Arn
+      Type: STANDARD
+      AccessPolicies:
+      - PolicyArn:
+          Fn::Sub: arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+        AccessScope:
+          Type: cluster
+  Bootstrap:
+    Type: AWS::EC2::Instance
+    DependsOn:
+    - Workers
+    - CoreDns
+    - EbsAddon
+    - BootstrapAccess
+    - TargetBindingIdentity
+    - LogWriterIdentity
+    - JenkinsClusterAccess
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT25M
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /opt/platform.yaml:
+              content:
+                Fn::Sub: |
+                  apiVersion: storage.k8s.io/v1
+                  kind: StorageClass
+                  metadata: {name: etp-gp3}
+                  provisioner: ebs.csi.aws.com
+                  parameters: {type: gp3, encrypted: 'true'}
+                  volumeBindingMode: WaitForFirstConsumer
+                  allowVolumeExpansion: true
+                  reclaimPolicy: Delete
+                  ---
+                  apiVersion: admissionregistration.k8s.io/v1
+                  kind: ValidatingAdmissionPolicy
+                  metadata: {name: etp-clusterip-services}
+                  spec:
+                    failurePolicy: Fail
+                    matchConstraints: {resourceRules: [{apiGroups: [''], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [services]}]}
+                    validations:
+                    - expression: (!has(object.spec.type) || object.spec.type == 'ClusterIP') && (!has(object.spec.externalIPs) || size(object.spec.externalIPs)
+                        == 0)
+                      message: Training services must use ClusterIP without externalIPs. Engineering owns public routing.
+                  ---
+                  apiVersion: admissionregistration.k8s.io/v1
+                  kind: ValidatingAdmissionPolicyBinding
+                  metadata: {name: etp-clusterip-services}
+                  spec:
+                    policyName: etp-clusterip-services
+                    validationActions:
+                    - Deny
+                    matchResources: {namespaceSelector: {matchLabels: {etp-environment: 'true'}}}
+                  --- {apiVersion: v1, kind: Namespace, metadata: {name: amazon-cloudwatch}}
+                  --- {apiVersion: v1, kind: ServiceAccount, metadata: {name: fluent-bit, namespace: amazon-cloudwatch}}
+                  ---
+                  apiVersion: rbac.authorization.k8s.io/v1
+                  kind: ClusterRole
+                  metadata: {name: etp-fluent-bit}
+                  rules:
+                  - {apiGroups: [''], resources: [pods, namespaces], verbs: [get, list, watch]}
+                  ---
+                  apiVersion: rbac.authorization.k8s.io/v1
+                  kind: ClusterRoleBinding
+                  metadata: {name: etp-fluent-bit}
+                  subjects:
+                  - {kind: ServiceAccount, name: fluent-bit, namespace: amazon-cloudwatch}
+                  roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: etp-fluent-bit}
+                  ---
+                  apiVersion: v1
+                  kind: ConfigMap
+                  metadata: {name: fluent-bit, namespace: amazon-cloudwatch}
+                  data:
+                    fluent-bit.conf: |
+                      [SERVICE]
+                          Flush 5
+                          Log_Level warn
+                          Parsers_File /fluent-bit/parsers/parsers.conf
+                      [INPUT]
+                          Name tail
+                          Path /var/log/containers/*_etp-*_*.log
+                          Tag kube.*
+                          multiline.parser docker, cri
+                          DB /var/fluent-bit/state/tail.db
+                          Mem_Buf_Limit 10MB
+                          Skip_Long_Lines On
+                          Read_From_Head Off
+                      [FILTER]
+                          Name kubernetes
+                          Match kube.*
+                          Merge_Log On
+                          Keep_Log On
+                          Labels Off
+                          Annotations Off
+                      [FILTER]
+                          Name grep
+                          Match kube.*
+                          Regex $kubernetes['namespace_name'] ^etp-
+                      [OUTPUT]
+                          Name cloudwatch_logs
+                          Match kube.*
+                          region ${AWS::Region}
+                          log_group_name /fidelity/${PlatformName}/unknown
+                          log_group_template /fidelity/${PlatformName}/$kubernetes['namespace_name']
+                          log_stream_prefix application-
+                          auto_create_group false
+                          Retry_Limit 5
+                  ---
+                  apiVersion: apps/v1
+                  kind: DaemonSet
+                  metadata: {name: fluent-bit, namespace: amazon-cloudwatch}
+                  spec:
+                    selector: {matchLabels: {app: fluent-bit}}
+                    template:
+                      metadata: {labels: {app: fluent-bit}}
+                      spec:
+                        serviceAccountName: fluent-bit
+                        nodeSelector: {kubernetes.io/os: linux}
+                        containers:
+                        - name: fluent-bit
+                          image: public.ecr.aws/aws-observability/aws-for-fluent-bit:3.2.1
+                          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}
+                          volumeMounts:
+                          - {name: logs, mountPath: /var/log, readOnly: true}
+                          - {name: state, mountPath: /var/fluent-bit/state}
+                          - {name: config, mountPath: /fluent-bit/etc/fluent-bit.conf, subPath: fluent-bit.conf, readOnly: true}
+                        volumes:
+                        - {name: logs, hostPath: {path: /var/log, type: Directory}}
+                        - {name: state, hostPath: {path: /var/lib/etp-fluent-bit, type: DirectoryOrCreate}}
+                        - {name: config, configMap: {name: fluent-bit}}
+              mode: '000600'
+            /opt/jenkins-jobs.py:
+              content: |
+                import base64, json, subprocess
+                import urllib.error, urllib.parse, urllib.request
+                import xml.etree.ElementTree as ET
+
+                config = json.load(open('/opt/jenkins-jobs.json'))
+                secret = json.loads(subprocess.check_output([
+                    'aws', 'secretsmanager', 'get-secret-value', '--secret-id', config['secret'],
+                    '--region', config['region'], '--query', 'SecretString', '--output', 'text'], text=True))
+                auth = base64.b64encode((secret['username'] + ':' + secret['apiToken']).encode()).decode()
+
+                def request(path, data=None):
+                    req = urllib.request.Request(config['url'] + path, data=data,
+                        headers={'Authorization': 'Basic ' + auth, 'Content-Type': 'application/xml'})
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        return response.read()
+
+                def element(parent, name, text=None, **attrs):
+                    child = ET.SubElement(parent, name, attrs)
+                    child.text = text
+                    return child
+
+                folder = '/job/' + config['region']
+                try:
+                    request(folder + '/api/json')
+                except urllib.error.HTTPError as error:
+                    if error.code != 404:
+                        raise
+                    request('/createItem?' + urllib.parse.urlencode({'name': config['region']}),
+                        b'<com.cloudbees.hudson.plugins.folder.Folder plugin="cloudbees-folder"><properties/></com.cloudbees.hudson.plugins.folder.Folder>')
+                first, count = int(config['first']), int(config['students'])
+                if first + count - 1 > 143:
+                    raise ValueError('Student numbers must be within s001 to s143')
+                for number in range(first, first + count):
+                    student = f's{number:03d}'
+                    name = config['platform'] + '-' + student
+                    marker = 'Training deployment: ' + name
+                    root = ET.Element('flow-definition', plugin='workflow-job')
+                    element(root, 'description', marker)
+                    permissions = element(element(root, 'properties'), 'hudson.security.AuthorizationMatrixProperty')
+                    for permission in ['Read', 'Build', 'Cancel']:
+                        element(permissions, 'permission', 'USER:hudson.model.Item.' + permission + ':' + student)
+                    definition = element(root, 'definition', **{'class': 'org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition', 'plugin': 'workflow-cps'})
+                    scm = element(definition, 'scm', **{'class': 'hudson.plugins.git.GitSCM', 'plugin': 'git'})
+                    element(scm, 'configVersion', '2')
+                    remote = element(element(scm, 'userRemoteConfigs'), 'hudson.plugins.git.UserRemoteConfig')
+                    element(remote, 'url', config['repository'])
+                    element(remote, 'credentialsId', 'github-read')
+                    element(element(element(scm, 'branches'), 'hudson.plugins.git.BranchSpec'), 'name', config['revision'])
+                    element(definition, 'scriptPath', 'deploy/Jenkinsfile')
+                    element(definition, 'lightweight', 'true')
+                    element(root, 'disabled', 'false')
+                    job = folder + '/job/' + urllib.parse.quote(name, safe='') + '/config.xml'
+                    try:
+                        existing = ET.fromstring(request(job))
+                        if existing.findtext('description') != marker:
+                            raise ValueError('Job already exists outside this kit: ' + name)
+                    except urllib.error.HTTPError as error:
+                        if error.code != 404:
+                            raise
+                        job = folder + '/createItem?' + urllib.parse.urlencode({'name': name})
+                    request(job, ET.tostring(root, encoding='utf-8'))
+                    print('Configured ' + name)
+              mode: '000600'
+            /opt/jenkins-jobs.json:
+              content:
+                secret:
+                  Ref: JenkinsApiSecretArn
+                region:
+                  Ref: AWS::Region
+                url:
+                  Ref: JenkinsUrl
+                platform:
+                  Ref: PlatformName
+                students:
+                  Ref: StudentCount
+                first:
+                  Ref: FirstStudentNumber
+                repository:
+                  Ref: DeploymentRepositoryUrl
+                revision:
+                  Ref: DeploymentRevision
+              mode: '000600'
+    Properties:
+      ImageId:
+        Ref: BootstrapAmi
+      InstanceType: t3.small
+      SubnetId:
+        Ref: PrivateA
+      SecurityGroupIds:
+      - Ref: JenkinsSecurityGroup
+      IamInstanceProfile:
+        Ref: BootstrapProfile
+      BlockDeviceMappings:
+      - DeviceName: /dev/xvda
+        Ebs:
+          VolumeSize: 16
+          VolumeType: gp3
+          Encrypted: true
+          DeleteOnTermination: true
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: ${PlatformName}-setup
+      UserData:
+        Fn::Base64:
+          Fn::Sub: |
+            #!/bin/bash
+            set -euo pipefail
+            dnf install -y aws-cfn-bootstrap tar gzip
+            trap '/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource Bootstrap --region ${AWS::Region}' EXIT
+            /opt/aws/bin/cfn-init --stack ${AWS::StackName} --resource Bootstrap --region ${AWS::Region}
+            version=$(curl -fsSL https://dl.k8s.io/release/stable-${KubernetesVersion}.txt)
+            curl -fsSL "https://dl.k8s.io/release/$version/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl
+            curl -fsSL "https://dl.k8s.io/release/$version/bin/linux/amd64/kubectl.sha256" -o /tmp/kubectl.sha256
+            printf '%s  /usr/local/bin/kubectl\n' "$(cat /tmp/kubectl.sha256)" | sha256sum --check
+            chmod +x /usr/local/bin/kubectl
+            curl -fsSL https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz -o /tmp/helm.tar.gz
+            curl -fsSL https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz.sha256sum -o /tmp/helm.sha256
+            cd /tmp
+            sed 's/helm-v3.19.0-linux-amd64.tar.gz/helm.tar.gz/' helm.sha256 | sha256sum --check
+            tar -xzf helm.tar.gz
+            install linux-amd64/helm /usr/local/bin/helm
+            aws eks update-kubeconfig --name ${PlatformName} --region ${AWS::Region}
+            helm repo add eks https://aws.github.io/eks-charts
+            helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+              --namespace kube-system --version 3.5.0 \
+              --set clusterName=${PlatformName},region=${AWS::Region},vpcId=${Vpc} \
+              --set serviceAccount.name=aws-load-balancer-controller \
+              --set enableServiceMutatorWebhook=false,enableBackendSecurityGroup=false \
+              --set enableShield=false,enableWaf=false,enableWafv2=false --wait --timeout 10m
+            kubectl apply -f /opt/platform.yaml
+            kubectl rollout status daemonset/fluent-bit -n amazon-cloudwatch --timeout=5m
+            python3 /opt/jenkins-jobs.py
 Outputs:
+  JFrogHost:
+    Value:
+      Ref: JFrogHost
+    Export:
+      Name:
+        Fn::Sub: ${PlatformName}-JFrogHost
+  JFrogRepository:
+    Value:
+      Ref: JFrogRepository
+    Export:
+      Name:
+        Fn::Sub: ${PlatformName}-JFrogRepository
+  JenkinsRoleArn:
+    Value:
+      Ref: PlatformAdminRoleArn
+    Export:
+      Name:
+        Fn::Sub: ${PlatformName}-JenkinsRoleArn
+  SetupInstanceId:
+    Value:
+      Ref: Bootstrap
   PlatformName: {Value: {Ref: PlatformName}, Export: {Name: {'Fn::Sub': '${PlatformName}-PlatformName'}}}
   ClusterName: {Value: {Ref: Cluster}, Export: {Name: {'Fn::Sub': '${PlatformName}-ClusterName'}}}
   VpcId: {Value: {Ref: Vpc}, Export: {Name: {'Fn::Sub': '${PlatformName}-VpcId'}}}
